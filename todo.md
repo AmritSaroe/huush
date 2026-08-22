@@ -12,11 +12,11 @@
 - [x] Replace the unstable cycling font UI with direct font choices, add Nunito, and remove Lora.
 - [x] Replace the fixed size presets with direct A− and A+ reading-size controls.
 - [x] Improve discovery of responsive, lazy-loaded, and hero images during article extraction.
-- [ ] Rebuild the Android APK and provide the updated artifact for focused mobile retesting.
+- [x] Rebuild the Android APK and provide the updated artifact for focused mobile retesting.
 
 ## Navigation gesture correction
 
 - [x] Restore Android system back and edge-swipe navigation without allowing horizontal page panning or overscroll bounce.
 - [x] Avoid preventively blocking all browser touch gestures at the document level.
 - [x] Deduplicate image-load telemetry across settings-driven reader re-renders.
-- [ ] Build and provide a navigation-corrected Android APK.
+- [x] Build and provide a navigation-corrected Android APK.
