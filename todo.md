@@ -50,3 +50,11 @@
 - [x] Add a lime highlighter treatment for selected editorial phrases and active reading states without fabricating editorial summaries.
 - [x] Make light and dark themes visually complete, reachable from the app UI, and persistently stored.
 - [x] Build and provide a large-type editorial Android APK for testing.
+
+## Clean library and bottom-plus capture
+
+- [x] Remove the inline article URL form and its duplicate add affordances from the library.
+- [x] Open a focused add-reading sheet from the persistent bottom plus button.
+- [x] Simplify the library header and saved-reading hierarchy so articles take visual priority.
+- [x] Preserve native extraction, diagnostics, themes, focus mode, and Android back behavior through the new capture flow.
+- [ ] Build and provide a streamlined Android APK for testing.

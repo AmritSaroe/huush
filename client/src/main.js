@@ -25,6 +25,7 @@ const state = {
   article: null,
   articleScrollTop: 0,
   settingsOpen: false,
+  captureOpen: false,
   focusMode: false,
   articles: [],
   settings: { ...DEFAULT_SETTINGS },
@@ -316,7 +317,7 @@ function currentDayLabel() {
 function bottomNavigationMarkup() {
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
     <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Today</span></button>
-    <button class="bottom-navigation__add" data-action="scroll-capture" aria-label="Add a reading">${icon("plus", 23)}</button>
+    <button class="bottom-navigation__add" data-action="open-capture" aria-label="Add a reading">${icon("plus", 23)}</button>
     <button class="bottom-navigation__item ${state.activeTab === "debug" ? "is-active" : ""}" data-action="show-debug">${icon("terminal", 21)}<span>Debug</span></button>
   </nav>`;
 }
@@ -325,20 +326,24 @@ function articleListMarkup() {
   if (!state.articles.length) {
     return `<section class="empty-library"><span class="empty-library__icon">${icon("archive", 31)}</span><div><h2>Your brief begins here.</h2><p>Save an article that deserves a little more time.</p></div></section>`;
   }
-  return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>Your saved reading</p><h2>Worth a return.</h2></div><span>${state.articles.length} saved</span></div><div class="article-card-list">${state.articles.map((article) => {
+  return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>Saved articles</p><h2>Worth a return.</h2></div></div><div class="article-card-list">${state.articles.map((article) => {
     const preview = articlePreviewImage(article);
     return `<button class="article-card" data-action="open-article" data-id="${article.id}">${preview ? `<img class="article-card__image" src="${escapeHtml(preview)}" alt="" loading="lazy" />` : `<span class="article-card__image article-card__image--empty">${icon("book", 34)}</span>`}<span class="article-card__copy"><span class="article-card__source"><b>${escapeHtml(sourceInitials(article.source))}</b>${escapeHtml(article.source)}</span><strong>${escapeHtml(article.title)}</strong><small>${article.readingMinutes} min read · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button>`;
   }).join("")}</div></section>`;
 }
 
 function libraryMarkup() {
-  const busy = state.busy ? "is-busy" : "";
   return `<main class="dashboard-screen editorial-library">
-    <header class="editorial-topbar"><button class="mark-button" aria-label="whitemint library">${icon("mark", 24)}</button><span class="editorial-topbar__title">${currentDayLabel()} ${icon("chevron", 17)}</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
-    <section class="daily-brief"><p>Hello,</p><h1>Your saved reading,<br /><span>delivered with room to think.</span></h1><div class="daily-brief__byline">${icon("mark", 14)}<span>Private to whitemint</span></div></section>
-    <section class="save-card" id="save-card" aria-labelledby="save-title"><div class="save-card__heading"><div><p>Add to your brief</p><h2 id="save-title">Save a web article</h2></div><span class="save-card__icon">${icon("plus", 20)}</span></div><form class="capture__form" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" placeholder="Paste an article URL" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="save-card__note">Cleaned on your device, ready when you are.</p></section>
+    <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">whitemint</span><span class="editorial-topbar__title">${currentDayLabel()}</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
+    <section class="daily-brief daily-brief--clean"><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
     ${articleListMarkup()}
-  </main>${bottomNavigationMarkup()}`;
+  </main>${bottomNavigationMarkup()}${captureMarkup()}`;
+}
+
+function captureMarkup() {
+  if (!state.captureOpen) return "";
+  const busy = state.busy ? "is-busy" : "";
+  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste a public article link. whitemint will fetch and clean it on your device.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Your saved reading stays private to this device.</p></section>`;
 }
 
 function debugMarkup() {
@@ -368,7 +373,7 @@ function toastMarkup() {
 
 function render() {
   const root = document.querySelector("#root");
-  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${toastMarkup()}</div>`;
+  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${toastMarkup()}</div>`;
   applySettings();
   if (state.article) requestAnimationFrame(() => {
     const surface = document.querySelector(".reader-scroll-surface");
@@ -396,6 +401,7 @@ async function handleExtract(form) {
     state.article = article;
     state.articleScrollTop = 0;
     state.focusMode = false;
+    state.captureOpen = false;
     showToast("Saved to your reading shelf.", "success");
   } catch (error) {
     log("fetch.failed", `${safeUrlForLog(url)} · ${error instanceof Error ? error.message : "Unknown extraction error"}`);
@@ -422,17 +428,12 @@ async function copyText(text) {
   textarea.remove();
 }
 
-function scrollToCapture() {
-  if (state.article || state.activeTab !== "library") {
-    state.article = null;
-    state.focusMode = false;
-    state.activeTab = "library";
-    render();
-  }
-  requestAnimationFrame(() => document.querySelector("#save-card")?.scrollIntoView({ behavior: "smooth", block: "center" }));
-}
-
 function navigateBack() {
+  if (state.captureOpen) {
+    state.captureOpen = false;
+    render();
+    return true;
+  }
   if (state.settingsOpen) {
     state.settingsOpen = false;
     render();
@@ -463,6 +464,7 @@ async function handleAction(target) {
   if (action === "show-library") {
     state.activeTab = "library";
     state.article = null;
+    state.captureOpen = false;
     state.focusMode = false;
     render();
     return;
@@ -470,12 +472,24 @@ async function handleAction(target) {
   if (action === "show-debug") {
     state.activeTab = "debug";
     state.article = null;
+    state.captureOpen = false;
     state.focusMode = false;
     log("debug.opened", "User opened diagnostics");
     render();
     return;
   }
-  if (action === "scroll-capture") return scrollToCapture();
+  if (action === "open-capture") {
+    state.captureOpen = true;
+    state.settingsOpen = false;
+    render();
+    requestAnimationFrame(() => document.querySelector("#article-url")?.focus());
+    return;
+  }
+  if (action === "close-capture") {
+    state.captureOpen = false;
+    render();
+    return;
+  }
   if (action === "open-article") {
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
     state.articleScrollTop = 0;
