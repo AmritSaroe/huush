@@ -1,20 +1,35 @@
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { Readability } from "@mozilla/readability";
-import DOMPurify from "dompurify";
 
-export const ARTICLE_STORAGE_KEY = "whitemint:articles";
-export const SHORT_ARTICLE_LIMITS = Object.freeze({
-  minParagraphs: 3,
-  minCharacters: 1200,
-});
+/**
+ * whitemint — Article Extractor
+ * Multi-strategy extraction with quality scoring.
+ * Designed for Capacitor (native WebView, no CORS).
+ *
+ * Strategies:
+ *   1. Direct fetch + Readability    — fastest, works for static sites
+ *   2. Render-then-extract           — iframe + JS execution, catches lazy content
+ *   3. Archive.org via Jina Reader  — last-resort recovery for blocked/empty pages
+ */
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+// ─── Config ───
+const CFG = {
+  MIN_CHARS: 800,
+  MIN_PARAGRAPHS: 3,
+  RENDER_TIMEOUT: 6000,
+  RENDER_SETTLE_MS: 800,
+  RENDER_MIN_WAIT: 2000,
+  FETCH_TIMEOUT: 15000,
+};
 
-const SOURCE_DOMAIN_NAMES = Object.freeze({
+const SOURCE_MAP = {
   "mybs.in": "Business Standard",
   "business-standard.com": "Business Standard",
+  "livemint.com": "Live Mint",
+  "economictimes.com": "Economic Times",
+  "economictimes.indiatimes.com": "Economic Times",
+  "indianexpress.com": "Indian Express",
   "thehindu.com": "The Hindu",
-  "indianexpress.com": "The Indian Express",
   "hindustantimes.com": "Hindustan Times",
   "indiatoday.in": "India Today",
   "ndtv.com": "NDTV",
@@ -24,559 +39,462 @@ const SOURCE_DOMAIN_NAMES = Object.freeze({
   "bbc.co.uk": "BBC",
   "theguardian.com": "The Guardian",
   "nytimes.com": "The New York Times",
-  "washingtonpost.com": "The Washington Post",
-  "wsj.com": "The Wall Street Journal",
+  "washingtonpost.com": "Washington Post",
+  "wsj.com": "Wall Street Journal",
   "ft.com": "Financial Times",
   "economist.com": "The Economist",
   "medium.com": "Medium",
   "substack.com": "Substack",
-});
+  "techcrunch.com": "TechCrunch",
+  "wired.com": "Wired",
+  "theverge.com": "The Verge",
+  "cnbc.com": "CNBC",
+  "bloomberg.com": "Bloomberg",
+  "github.io": "GitHub",
+  "wordpress.com": "WordPress",
+  "ghost.io": "Ghost",
+  "dev.to": "Dev.to",
+};
 
-const PURIFY_CONFIG = Object.freeze({
-  USE_PROFILES: { html: true },
-  ALLOW_DATA_ATTR: false,
-  ADD_TAGS: ["figure", "figcaption", "picture", "source"],
-  ADD_ATTR: [
-    "src",
-    "alt",
-    "title",
-    "width",
-    "height",
-    "loading",
-    "decoding",
-    "srcset",
-    "sizes",
-  ],
-  FORBID_TAGS: [
-    "script",
-    "style",
-    "iframe",
-    "object",
-    "embed",
-    "form",
-    "input",
-    "button",
-    "textarea",
-    "select",
-    "option",
-    "svg",
-    "meta",
-    "link",
-    "base",
-    "noscript",
-  ],
-  FORBID_ATTR: ["style", "class", "id", "srcdoc"],
-});
+const PAYWALL_PHRASES = [
+  "subscribe now",
+  "subscription required",
+  "please log in",
+  "sign in to read",
+  "premium content",
+  "continue reading",
+  "exclusive story",
+  "limited access",
+  "get full access",
+  "sign up to read",
+  "unlock this article",
+  "uh-oh! this is an exclusive",
+  "this is a premium article",
+  "you have reached your limit",
+  "login to get access",
+];
 
-function normalizeWhitespace(value = "") {
-  return String(value).replace(/\s+/g, " ").trim();
+// ─── Utils ───
+function clean(text = "") {
+  return String(text).replace(/\s+/g, " ").trim();
 }
 
-function textContentFromHtml(html = "") {
-  const shell = document.createElement("div");
-  shell.innerHTML = html;
-  return normalizeWhitespace(shell.textContent || shell.innerText || "");
+function uid() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function escapeHtml(value = "") {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function resolveHttpUrl(candidate, baseUrl) {
-  if (!candidate) return "";
+function sourceName(url) {
   try {
-    const resolved = new URL(String(candidate).trim(), baseUrl || undefined);
-    if (!/^https?:$/.test(resolved.protocol)) return "";
-    if (resolved.protocol === "http:" && /^https:/i.test(baseUrl || ""))
-      resolved.protocol = "https:";
-    return resolved.href;
+    const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    const mappedDomain = Object.keys(SOURCE_MAP).find((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+    return mappedDomain ? SOURCE_MAP[mappedDomain] : hostname;
   } catch {
-    return "";
+    return "Article";
   }
 }
 
-function bestSrcsetCandidate(value = "") {
-  return (
-    value
-      .split(",")
-      .map(entry => entry.trim().split(/\s+/))
-      .filter(([url]) => Boolean(url))
-      .map(([url, descriptor = "1x"]) => ({
-        url,
-        score: Number.parseFloat(descriptor) || 1,
-      }))
-      .sort((a, b) => b.score - a.score)[0]?.url || ""
-  );
+function readTime(text = "") {
+  return Math.max(1, Math.round(clean(text).split(/\s+/).filter(Boolean).length / 200));
 }
 
-function imageCandidate(image, baseUrl) {
-  const candidates = [
-    image.getAttribute("data-src"),
-    image.getAttribute("data-original"),
-    image.getAttribute("data-lazy-src"),
-    image.getAttribute("data-image"),
-    bestSrcsetCandidate(image.getAttribute("data-srcset") || ""),
-    bestSrcsetCandidate(image.getAttribute("srcset") || ""),
-    image.getAttribute("src"),
-  ];
-  return (
-    candidates
-      .map(candidate => resolveHttpUrl(candidate || "", baseUrl))
-      .find(Boolean) || ""
-  );
+function escapeHtml(str = "") {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function normalizeArticleImages(root, baseUrl, heroFallback = "") {
-  root.querySelectorAll("img").forEach(image => {
-    const candidate = imageCandidate(image, baseUrl);
-    if (!candidate) {
-      image.remove();
-      return;
-    }
-    image.setAttribute("src", candidate);
-    image.setAttribute("loading", image.closest("figure") ? "eager" : "lazy");
-    image.setAttribute("decoding", "async");
-    [
-      "srcset",
-      "data-srcset",
-      "sizes",
-      "data-src",
-      "data-original",
-      "data-lazy-src",
-      "data-image",
-    ].forEach(attribute => image.removeAttribute(attribute));
+function textFromHtml(html = "") {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  return clean(parsed.body?.textContent || "");
+}
+
+function paragraphCount(html = "") {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  return Array.from(parsed.querySelectorAll("p")).filter((paragraph) => clean(paragraph.textContent || "")).length;
+}
+
+function isLowQuality(article) {
+  if (!article) return true;
+  return article.textContent.length < CFG.MIN_CHARS || paragraphCount(article.content) < CFG.MIN_PARAGRAPHS;
+}
+
+// ─── Quality Score ───
+function score(article) {
+  if (!article || !article.textContent) return -Infinity;
+  const txt = article.textContent;
+  const html = article.content || "";
+  let value = 0;
+
+  value += txt.length * 0.6;
+  value += (html.match(/<p\b/gi) || []).length * 120;
+  value += (html.match(/<h[2-6]\b/gi) || []).length * 60;
+  value += article.title?.length > 15 ? 250 : 0;
+  value += article.byline ? 80 : 0;
+  value += (html.match(/<img\b/gi) || []).length * 30;
+
+  const lower = txt.toLowerCase();
+  PAYWALL_PHRASES.forEach((phrase) => {
+    if (lower.includes(phrase)) value -= 400;
   });
-  if (!root.querySelector("img") && heroFallback)
-    root.insertAdjacentHTML("afterbegin", heroFallback);
+
+  return value;
 }
 
-function removeUnsafeNodes(root) {
-  root
-    .querySelectorAll(
-      "script, style, iframe, object, embed, form, input, button, textarea, select, option, svg, meta, link, base, noscript"
-    )
-    .forEach(node => node.remove());
-}
+// ─── Sanitize ───
+function sanitize(html = "", baseUrl = "", heroFallback = "") {
+  const div = document.createElement("div");
+  div.innerHTML = html;
 
-function stripPresentationAttributes(root) {
-  root.querySelectorAll("*").forEach(element => {
-    Array.from(element.attributes).forEach(attribute => {
+  div.querySelectorAll(
+    "script, style, iframe, object, embed, form, input, button, textarea, select, option, svg, canvas, meta, link, base, noscript, nav, aside"
+  ).forEach((element) => element.remove());
+
+  // Resolve lazy image candidates before removing data-* attributes.
+  div.querySelectorAll("img").forEach((img) => {
+    const candidates = [
+      img.getAttribute("data-src"),
+      img.getAttribute("data-original"),
+      img.getAttribute("data-lazy-src"),
+      img.getAttribute("src"),
+    ];
+    const src = candidates.find(Boolean);
+    if (src) {
+      try {
+        const resolved = new URL(src, baseUrl || document.baseURI).href;
+        if (!/^https?:$/i.test(new URL(resolved).protocol)) throw new Error("Unsupported image protocol");
+        img.setAttribute("src", resolved);
+        img.setAttribute("loading", "lazy");
+        img.setAttribute("decoding", "async");
+      } catch {
+        img.remove();
+      }
+    } else {
+      img.remove();
+    }
+    ["data-src", "data-original", "data-lazy-src", "srcset", "data-srcset", "sizes"].forEach((attribute) => img.removeAttribute(attribute));
+  });
+
+  div.querySelectorAll("*").forEach((element) => {
+    Array.from(element.attributes).forEach((attribute) => {
       const name = attribute.name.toLowerCase();
-      if (
-        name === "style" ||
-        name === "class" ||
-        name === "id" ||
-        name.startsWith("data-") ||
-        name.startsWith("on") ||
-        name === "srcdoc"
-      ) {
+      if (name === "style" || name === "class" || name === "id" || name.startsWith("data-") || name.startsWith("on") || name === "srcdoc") {
         element.removeAttribute(attribute.name);
       }
     });
   });
-}
 
-/**
- * Remove publisher styling and executable content from extracted article HTML.
- * Image lazy-loading attributes are normalized before all data-* attributes are removed.
- */
-export function sanitizeContent(
-  html = "",
-  { baseUrl = "", heroFallback = "" } = {}
-) {
-  const container = document.createElement("div");
-  container.innerHTML = String(html || "");
-  removeUnsafeNodes(container);
-  normalizeArticleImages(container, baseUrl, heroFallback);
-  removeUnsafeNodes(container);
-  stripPresentationAttributes(container);
-
-  const purified = DOMPurify.sanitize(container.innerHTML, PURIFY_CONFIG);
-  const cleanContainer = document.createElement("div");
-  cleanContainer.innerHTML = purified;
-  removeUnsafeNodes(cleanContainer);
-  stripPresentationAttributes(cleanContainer);
-  return cleanContainer.innerHTML;
-}
-
-function metaContent(doc, selectors) {
-  for (const selector of selectors) {
-    const content = normalizeWhitespace(
-      doc.querySelector(selector)?.getAttribute("content") || ""
-    );
-    if (content) return content;
-  }
-  return "";
-}
-
-/**
- * Prefer publisher-provided titles over Readability's title guess.
- * The h1 fallback deliberately uses textContent so split spans/elements are joined.
- */
-export function getTitleWithFallbacks(doc, readabilityTitle = "") {
-  const ogTitle = metaContent(doc, [
-    "meta[property='og:title']",
-    "meta[name='og:title']",
-  ]);
-  if (ogTitle) return ogTitle;
-
-  const twitterTitle = metaContent(doc, [
-    "meta[name='twitter:title']",
-    "meta[property='twitter:title']",
-  ]);
-  if (twitterTitle) return twitterTitle;
-
-  const headingTitle = normalizeWhitespace(
-    doc.querySelector("h1")?.textContent || ""
-  );
-  if (headingTitle) return headingTitle;
-
-  const guessedTitle = normalizeWhitespace(readabilityTitle);
-  return guessedTitle || "Untitled article";
-}
-
-function openGraphHeroImage(doc, baseUrl, title) {
-  const candidate = [
-    "meta[property='og:image']",
-    "meta[name='twitter:image']",
-    "meta[name='twitter:image:src']",
-    "meta[itemprop='image']",
-  ]
-    .map(selector => doc.querySelector(selector)?.getAttribute("content"))
-    .find(Boolean);
-  const src = resolveHttpUrl(candidate || "", baseUrl);
-  return src
-    ? `<figure><img src="${escapeHtml(src)}" alt="${escapeHtml(title)}" loading="eager" decoding="async"></figure>`
-    : "";
-}
-
-function isPublicIntroParagraph(text) {
-  if (text.length < 90 || text.length > 1500) return false;
-  return !/(subscribe|subscription|sign in|register|log in|unlock|premium plan|continue reading|advertisement|cookie policy|privacy policy|related stories|most popular|recommended for you)/i.test(
-    text
-  );
-}
-
-function publicParagraphFallback(doc, currentContent) {
-  const roots = [
-    doc.querySelector("article"),
-    doc.querySelector("main"),
-    doc.body,
-  ].filter(Boolean);
-  const seen = new Set();
-  const paragraphs = [];
-
-  for (const root of roots) {
-    for (const paragraph of root.querySelectorAll("p")) {
-      if (
-        paragraph.closest(
-          "nav, header, footer, aside, form, [role='navigation'], [aria-label*='subscription' i]"
-        )
-      )
-        continue;
-      const text = normalizeWhitespace(paragraph.textContent || "");
-      if (!isPublicIntroParagraph(text) || seen.has(text)) continue;
-      seen.add(text);
-      paragraphs.push(text);
-      if (paragraphs.length === 5) break;
-    }
-    if (paragraphs.length === 5) break;
-  }
-
-  const currentText = textContentFromHtml(currentContent);
-  const fallbackText = paragraphs.join(" ");
-  if (paragraphs.length < 2 || fallbackText.length <= currentText.length + 120)
-    return null;
-  return {
-    content: paragraphs.map(text => `<p>${escapeHtml(text)}</p>`).join(""),
-    count: paragraphs.length,
-  };
-}
-
-function contentMetrics(content) {
-  const doc = new DOMParser().parseFromString(content || "", "text/html");
-  const text = normalizeWhitespace(doc.body?.textContent || "");
-  const paragraphs = Array.from(doc.querySelectorAll("p")).filter(
-    paragraph => normalizeWhitespace(paragraph.textContent || "").length > 0
-  ).length;
-  return { text, paragraphs, characters: text.length };
-}
-
-export function isShortArticle({ paragraphs = 0, characters = 0 } = {}) {
-  return (
-    paragraphs < SHORT_ARTICLE_LIMITS.minParagraphs ||
-    characters < SHORT_ARTICLE_LIMITS.minCharacters
-  );
-}
-
-function createDocumentFromHtml(rawHtml) {
-  if (typeof DOMParser === "undefined")
-    throw new Error("This reader requires a browser DOM.");
-  const doc = new DOMParser().parseFromString(rawHtml || "", "text/html");
-  if (!doc?.body) throw new Error("The page returned invalid HTML.");
-  return doc;
-}
-
-function extractFromHtml(rawHtml, url) {
-  const doc = createDocumentFromHtml(rawHtml);
-  const parsed = new Readability(doc.cloneNode(true), {
-    keepClasses: false,
-    charThreshold: 140,
-  }).parse();
-  const readabilityContent = parsed?.content?.trim() || "";
-  if (!readabilityContent || !textContentFromHtml(readabilityContent))
-    return null;
-
-  const title = getTitleWithFallbacks(doc, parsed?.title || "");
-  const fallback = publicParagraphFallback(doc, readabilityContent);
-  const sourceContent = fallback?.content || readabilityContent;
-  const content = sanitizeContent(sourceContent, {
-    baseUrl: url,
-    heroFallback: openGraphHeroImage(doc, url, title),
+  div.querySelectorAll("div, span, p").forEach((element) => {
+    if (!element.textContent.trim() && !element.querySelector("img")) element.remove();
   });
-  const metrics = contentMetrics(content);
-  if (!metrics.text) return null;
 
-  return {
-    parsed,
-    title,
-    content,
-    excerpt:
-      normalizeWhitespace(parsed?.excerpt || "") || metrics.text.slice(0, 220),
-    byline: normalizeWhitespace(parsed?.byline || ""),
-    metrics,
-    publicParagraphCount: fallback?.count || 0,
-  };
+  if (!div.firstElementChild && heroFallback) div.insertAdjacentHTML("afterbegin", heroFallback);
+  return div.innerHTML;
 }
 
-function uniqueId() {
-  return (
-    globalThis.crypto?.randomUUID?.() ||
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  );
+/**
+ * Compatibility export used by the existing reader's storage hydration path.
+ * It accepts both the attached script's `(html, baseUrl)` form and the previous
+ * whitemint adapter's `(html, { baseUrl, heroFallback })` form.
+ */
+export function sanitizeContent(html = "", baseUrl = "", heroFallback = "") {
+  if (baseUrl && typeof baseUrl === "object") {
+    heroFallback = baseUrl.heroFallback || "";
+    baseUrl = baseUrl.baseUrl || "";
+  }
+  return sanitize(html, baseUrl, heroFallback);
 }
 
-function minutesFor(text) {
-  return Math.max(
-    1,
-    Math.ceil(
-      normalizeWhitespace(text).split(/\s+/).filter(Boolean).length / 225
-    )
-  );
+// ─── Title Fix ───
+function fixTitle(doc, readabilityTitle = "") {
+  const candidates = [
+    doc.querySelector('meta[property="og:title"]')?.content,
+    doc.querySelector('meta[name="twitter:title"]')?.content,
+    doc.querySelector('meta[name="title"]')?.content,
+    doc.querySelector("article h1")?.textContent,
+    doc.querySelector("h1")?.textContent,
+    doc.querySelector('[itemprop="headline"]')?.textContent,
+    readabilityTitle,
+  ]
+    .filter(Boolean)
+    .map(clean);
+
+  for (const title of candidates) {
+    if (title.length > 10 && title.length < 200) return title;
+  }
+  return candidates[0] || "Untitled";
 }
 
-function hostnameFromUrl(value) {
+// ─── Byline Fix ───
+function fixByline(doc, readabilityByline = "") {
+  return clean(readabilityByline) ||
+    clean(doc.querySelector('meta[name="author"]')?.content) ||
+    clean(doc.querySelector('[itemprop="author"]')?.textContent) ||
+    "";
+}
+
+// ─── Hero Image ───
+function heroImage(doc, baseUrl, title) {
+  const src = [
+    doc.querySelector('meta[property="og:image"]')?.content,
+    doc.querySelector('meta[name="twitter:image"]')?.content,
+    doc.querySelector('meta[itemprop="image"]')?.content,
+  ].find(Boolean);
+
+  if (!src) return "";
   try {
-    return new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+    const url = new URL(src, baseUrl).href;
+    return `<figure><img src="${escapeHtml(url)}" alt="${escapeHtml(title)}" loading="eager" decoding="async"></figure>`;
   } catch {
     return "";
   }
 }
 
-/** Return the normalized hostname used for source-name matching. */
-export function domainFromUrl(value) {
-  return hostnameFromUrl(value);
+// ─── Extract from parsed DOM ───
+function extractFromDom(doc, url) {
+  const clone = doc.cloneNode(true);
+  const parsed = new Readability(clone, { charThreshold: 20 }).parse();
+  if (!parsed) return null;
+
+  const title = fixTitle(doc, parsed.title);
+  const byline = fixByline(doc, parsed.byline);
+  const content = sanitizeContent(parsed.content, url);
+  const text = textFromHtml(content);
+
+  if (!text || text.length < 100) return null;
+
+  return {
+    title,
+    byline,
+    content: heroImage(doc, url, title) + content,
+    textContent: text,
+    excerpt: text.slice(0, 240),
+  };
 }
 
-/** Map known publishers to display names and provide a readable fallback for unknown hosts. */
-export function readableSourceName(value) {
-  const hostname = hostnameFromUrl(value) || normalizeWhitespace(value);
-  const mappedDomain = Object.keys(SOURCE_DOMAIN_NAMES).find(
-    domain => hostname === domain || hostname.endsWith(`.${domain}`)
-  );
-  if (mappedDomain) return SOURCE_DOMAIN_NAMES[mappedDomain];
-  if (!hostname) return "Saved page";
-  return hostname;
-}
-
-function archiveLookupUrl(originalUrl) {
-  return `https://r.jina.ai/http://archive.is/newest/${encodeURIComponent(originalUrl)}`;
-}
-
-async function requestText(
-  url,
-  {
-    native,
-    http = CapacitorHttp,
-    fetchImpl = globalThis.fetch,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    headers = {},
-  } = {}
-) {
-  if (native) {
-    const response = await http.get({
+async function requestHtml(url, { timeout = CFG.FETCH_TIMEOUT, preferNative = Capacitor.isNativePlatform() } = {}) {
+  if (preferNative) {
+    const response = await CapacitorHttp.get({
       url,
-      headers,
       responseType: "text",
-      connectTimeout: timeoutMs,
-      readTimeout: timeoutMs,
+      connectTimeout: timeout,
+      readTimeout: timeout,
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+      },
     });
-    if (response.status < 200 || response.status >= 400)
-      throw new Error(`Native request returned HTTP ${response.status}`);
-    return typeof response.data === "string"
-      ? response.data
-      : String(response.data || "");
+    if (response.status < 200 || response.status >= 400) throw new Error(`HTTP ${response.status}`);
+    return typeof response.data === "string" ? response.data : String(response.data || "");
   }
 
-  if (typeof fetchImpl !== "function")
-    throw new Error("Fetch is unavailable in this WebView.");
-  const controller =
-    typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeout = controller
-    ? globalThis.setTimeout(() => controller.abort(), timeoutMs)
-    : null;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
   try {
-    const response = await fetchImpl(url, {
-      headers,
+    const response = await fetch(url, {
       signal: controller?.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
     });
-    if (!response.ok)
-      throw new Error(`Browser request returned HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.text();
   } finally {
-    if (timeout) globalThis.clearTimeout(timeout);
+    if (timer) clearTimeout(timer);
   }
 }
 
-export async function fetchRawHtml(url, options = {}) {
-  const {
-    native = Capacitor.isNativePlatform(),
-    http = CapacitorHttp,
-    fetchImpl = globalThis.fetch,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    log = () => {},
-    archive = false,
-  } = options;
-  const requestUrl = archive ? archiveLookupUrl(url) : url;
-  log(
-    archive
-      ? "fetch.archive.start"
-      : native
-        ? "fetch.native.start"
-        : "fetch.web.start",
-    requestUrl
-  );
-  return requestText(requestUrl, {
-    native,
-    http,
-    fetchImpl,
-    timeoutMs,
-    headers: {
-      Accept: "text/html,application/xhtml+xml",
-      ...(archive ? { "x-respond-with": "html", "x-no-cache": "true" } : {}),
-    },
+// ─── Strategy 1: Direct Fetch ───
+async function strategyDirect(url) {
+  const html = await requestHtml(url);
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return extractFromDom(doc, url);
+}
+
+// ─── Strategy 2: Render-Then-Extract ───
+async function strategyRender(url) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
+    iframe.sandbox = "allow-same-origin allow-scripts";
+
+    let done = false;
+    let observer;
+    let poll;
+    let timeout;
+    let mutations = 0;
+    let lastMutation = Date.now();
+    const start = Date.now();
+
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      if (observer) observer.disconnect();
+      if (poll) clearInterval(poll);
+      if (timeout) clearTimeout(timeout);
+      iframe.remove();
+    };
+
+    const fail = (message) => {
+      if (done) return;
+      cleanup();
+      reject(new Error(message));
+    };
+
+    const finish = (result) => {
+      if (done) return;
+      if (!result) {
+        fail("Readability returned null from rendered DOM");
+        return;
+      }
+      cleanup();
+      resolve(result);
+    };
+
+    timeout = setTimeout(() => fail("Render timeout"), CFG.RENDER_TIMEOUT);
+
+    iframe.onload = () => {
+      const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!idoc) {
+        fail("No iframe document");
+        return;
+      }
+
+      lastMutation = Date.now();
+      observer = new MutationObserver(() => {
+        mutations++;
+        lastMutation = Date.now();
+      });
+      if (idoc.body) observer.observe(idoc.body, { childList: true, subtree: true, characterData: true });
+
+      setTimeout(() => {
+        try {
+          idoc.scrollingElement?.scrollTo(0, idoc.scrollingElement.scrollHeight);
+        } catch {
+          // Some WebViews do not expose scrollingElement.scrollTo for cross-origin frames.
+        }
+      }, 600);
+
+      poll = setInterval(() => {
+        if (done) return;
+
+        const idle = Date.now() - lastMutation;
+        const elapsed = Date.now() - start;
+        const hasBodyText = clean(idoc.body?.textContent || "").length > 100;
+        const settled = idle > CFG.RENDER_SETTLE_MS && (mutations > 0 || hasBodyText);
+        const minMet = elapsed > CFG.RENDER_MIN_WAIT;
+
+        if (settled && minMet) {
+          try {
+            finish(extractFromDom(idoc, url));
+          } catch (error) {
+            fail(error instanceof Error ? error.message : "Rendered extraction failed");
+          }
+        }
+      }, 200);
+    };
+
+    iframe.onerror = () => fail("Iframe load error");
+    document.body.appendChild(iframe);
+    iframe.src = url;
   });
 }
 
-/**
- * Fetch and extract an article. The archive request is attempted only when the
- * initial HTML response produces no article node/content; short public previews
- * are returned normally with previewOnly=true for the UI to explain.
- */
-export async function extractArticle(url, options = {}) {
-  const { log = () => {} } = options;
-  const rawHtml = await fetchRawHtml(url, options);
-  log(
-    "extract.parse.start",
-    `${rawHtml.length.toLocaleString()} bytes received`
-  );
+// ─── Strategy 3: Archive.org Fallback ───
+function archiveReaderUrl(url) {
+  return `https://r.jina.ai/https://web.archive.org/web/2if_/${url}`;
+}
 
-  let extracted = extractFromHtml(rawHtml, url);
-  let retrievedFrom = "origin";
+async function strategyArchive(url) {
+  const html = await requestHtml(archiveReaderUrl(url), { preferNative: Capacitor.isNativePlatform() });
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return extractFromDom(doc, url);
+}
 
-  if (!extracted) {
-    log(
-      "fetch.archive.fallback",
-      "Initial response contained no article content; trying archive.is through r.jina.ai"
-    );
+// ─── Master Extractor ───
+export async function extractArticle(url) {
+  const results = [];
+  const errors = [];
+
+  const runStrategy = async (name, fn) => {
     try {
-      const archivedHtml = await fetchRawHtml(url, {
-        ...options,
-        archive: true,
-      });
-      log(
-        "extract.archive.parse.start",
-        `${archivedHtml.length.toLocaleString()} bytes received`
-      );
-      extracted = extractFromHtml(archivedHtml, url);
-      if (extracted) retrievedFrom = "archive.is via r.jina.ai";
+      const raw = await fn();
+      if (!raw) return;
+      results.push({ ...raw, _strategy: name, _score: score(raw) });
     } catch (error) {
-      log(
-        "fetch.archive.failed",
-        error instanceof Error ? error.message : "Archive request failed"
-      );
+      errors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }
-
-  if (!extracted)
-    throw new Error(
-      "No article content was found in the page or its archive snapshot."
-    );
-
-  const source = readableSourceName(url);
-  const previewOnly = isShortArticle(extracted.metrics);
-  const article = {
-    id: uniqueId(),
-    url,
-    title: extracted.title,
-    byline: extracted.byline || source,
-    source,
-    content: extracted.content,
-    excerpt: extracted.excerpt,
-    readingMinutes: minutesFor(extracted.metrics.text),
-    dateAdded: new Date().toISOString(),
-    previewOnly,
-    previewReason: previewOnly
-      ? "The public extraction is shorter than three paragraphs or 1,200 characters."
-      : "",
-    retrievedFrom,
   };
 
-  if (extracted.publicParagraphCount)
-    log(
-      "extract.public_fallback.used",
-      `${extracted.publicParagraphCount} public introductory paragraphs retained`
-    );
-  log(
-    "extract.images.prepared",
-    `${new DOMParser().parseFromString(article.content, "text/html").images.length} image${new DOMParser().parseFromString(article.content, "text/html").images.length === 1 ? "" : "s"} ready`
-  );
-  log(
-    "extract.parse.success",
-    `${article.readingMinutes} min · ${extracted.metrics.characters.toLocaleString()} chars${previewOnly ? " · preview only" : ""}${retrievedFrom === "origin" ? "" : ` · ${retrievedFrom}`}`
-  );
-  return article;
+  await runStrategy("direct", () => strategyDirect(url));
+
+  // Render only when direct extraction is absent or looks too short. This keeps
+  // ordinary pages fast while still giving lazy-rendered publishers a chance.
+  const directBest = results[0];
+  if (!directBest || isLowQuality(directBest)) await runStrategy("render", () => strategyRender(url));
+
+  // Try the public Wayback snapshot when the origin and rendered attempts do
+  // not produce a substantial article. This is a recovery path, not a login or
+  // paywall bypass, and may legitimately return no snapshot.
+  const bestBeforeArchive = results.slice().sort((a, b) => b._score - a._score)[0];
+  if (!bestBeforeArchive || isLowQuality(bestBeforeArchive)) await runStrategy("archive.org", () => strategyArchive(url));
+
+  if (results.length === 0) {
+    const reason = errors.length ? ` ${errors.join("; ")}` : "";
+    throw new Error(`Could not extract article. This site may require a subscription or block automated access.${reason}`);
+  }
+
+  results.sort((a, b) => b._score - a._score);
+  const best = results[0];
+  const isPreview = isLowQuality(best);
+
+  return {
+    id: uid(),
+    url,
+    title: best.title,
+    byline: best.byline || sourceName(url),
+    source: sourceName(url),
+    content: best.content,
+    textContent: best.textContent,
+    excerpt: best.excerpt,
+    readingMinutes: readTime(best.textContent),
+    dateAdded: new Date().toISOString(),
+    previewOnly: isPreview,
+    strategy: best._strategy,
+    score: Math.round(best._score),
+  };
 }
 
-/** Load the article array from localStorage. Returns null when the key is absent or invalid. */
-export function loadArticlesFromStorage(storageKey = ARTICLE_STORAGE_KEY) {
+// ─── Validation ───
+export function validateUrl(value) {
   try {
-    if (typeof globalThis.localStorage === "undefined") return null;
-    const raw = globalThis.localStorage.getItem(storageKey);
-    if (raw === null) return null;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    const u = new URL(value);
+    return ["http:", "https:"].includes(u.protocol);
   } catch {
-    return null;
+    return false;
   }
 }
 
-/** Persist the article array in localStorage and report whether the write succeeded. */
-export function saveArticlesToStorage(
-  articles,
-  storageKey = ARTICLE_STORAGE_KEY
-) {
+// ─── Storage helpers ───
+const STORAGE_KEY = "whitemint:articles";
+
+export function loadArticles() {
   try {
-    if (typeof globalThis.localStorage === "undefined") return false;
-    globalThis.localStorage.setItem(
-      storageKey,
-      JSON.stringify(Array.isArray(articles) ? articles : [])
-    );
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveArticles(articles) {
+  try {
+    if (typeof localStorage === "undefined") return false;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.isArray(articles) ? articles : []));
     return true;
   } catch {
     return false;
