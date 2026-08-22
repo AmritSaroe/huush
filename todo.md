@@ -20,3 +20,9 @@
 - [x] Avoid preventively blocking all browser touch gestures at the document level.
 - [x] Deduplicate image-load telemetry across settings-driven reader re-renders.
 - [x] Build and provide a navigation-corrected Android APK.
+
+## Article scrolling correction
+
+- [x] Remove remaining native WebView scroll suppression that could prevent article movement.
+- [x] Create one explicit vertical reader scroll surface while leaving Android edge/back gestures available.
+- [ ] Build and provide a scrolling-corrected Android APK.

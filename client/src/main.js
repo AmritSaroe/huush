@@ -454,14 +454,16 @@ function readerMarkup() {
         <button class="toolbar-button" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 18)}</button>
       </div>
     </header>
-    <article class="article-reading" data-font="${state.settings.font}">
-      <p class="article-reading__source">${escapeHtml(article.source)}</p>
-      <h1>${escapeHtml(article.title)}</h1>
-      <div class="article-reading__meta"><span>${escapeHtml(article.byline)}</span><i></i><span>${article.readingMinutes} min read</span><i></i><span>${formatDate(article.dateAdded)}</span></div>
-      <div class="article-reading__rule"></div>
-      <div class="article-reading__body">${article.content}</div>
-      <footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 14)}</a></footer>
-    </article>
+    <section class="reader-scroll-surface" aria-label="Article reader">
+      <article class="article-reading" data-font="${state.settings.font}">
+        <p class="article-reading__source">${escapeHtml(article.source)}</p>
+        <h1>${escapeHtml(article.title)}</h1>
+        <div class="article-reading__meta"><span>${escapeHtml(article.byline)}</span><i></i><span>${article.readingMinutes} min read</span><i></i><span>${formatDate(article.dateAdded)}</span></div>
+        <div class="article-reading__rule"></div>
+        <div class="article-reading__body">${article.content}</div>
+        <footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 14)}</a></footer>
+      </article>
+    </section>
   </main>${settingsMarkup()}`;
 }
 
