@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^6",
+    "@capacitor/app": "6",
     "@capacitor/core": "^6",
     "@capacitor/preferences": "^6",
     "@hookform/resolvers": "^5.2.2",

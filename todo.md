@@ -26,3 +26,12 @@
 - [x] Remove remaining native WebView scroll suppression that could prevent article movement.
 - [x] Create one explicit vertical reader scroll surface while leaving Android edge/back gestures available.
 - [x] Build and provide a scrolling-corrected Android APK.
+
+## Native-inspired redesign and interaction correction
+
+- [x] Replace the current sparse index UI with a warm-white, card-led native dashboard informed by the supplied reference.
+- [x] Add a compact bottom navigation and a clear library summary without imitating the reference product’s branding or content.
+- [x] Make preference changes update only the relevant reader state so the screen no longer visibly reloads or blinks.
+- [x] Add a center-tap focus mode that hides reader controls and restores them on the next tap.
+- [x] Implement reliable Android back and edge-navigation handling for reader, settings, focus, and debug states.
+- [ ] Build and provide the redesigned Android APK.

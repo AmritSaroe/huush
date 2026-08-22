@@ -1,35 +1,31 @@
 /**
- * Quiet Index design reminder: words lead, controls are precise, and every
- * diagnostic state is expressed with restrained monochrome clarity.
+ * Mint Companion design reminder: warm-white native surfaces, deep navy controls,
+ * one whitemint accent card, and a reader that becomes quieter on demand.
  */
 import "./styles.css";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import { Preferences } from "@capacitor/preferences";
 import { Readability } from "@mozilla/readability";
 import DOMPurify from "dompurify";
 
-const KEYS = {
-  articles: "whitemint:articles",
-  settings: "whitemint:settings",
-  logs: "whitemint:logs",
-};
-
+const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs" };
 const LIMITS = { articles: 50, logs: 160 };
-
 const DEFAULT_SETTINGS = { theme: "light", font: "sans", fontSize: 16 };
-
 const FONTS = [
   { id: "sans", label: "Inter", family: "var(--font-sans)" },
+  { id: "nunito", label: "Nunito", family: "var(--font-nunito)" },
   { id: "merriweather", label: "Merriweather", family: "var(--font-serif)" },
   { id: "source-serif", label: "Source Serif", family: "var(--font-serif-3)" },
-  { id: "nunito", label: "Nunito", family: "var(--font-nunito)" },
   { id: "mono", label: "JetBrains", family: "var(--font-mono)" },
 ];
 
 const state = {
   activeTab: "library",
   article: null,
+  articleScrollTop: 0,
   settingsOpen: false,
+  focusMode: false,
   articles: [],
   settings: { ...DEFAULT_SETTINGS },
   logs: [],
@@ -40,24 +36,16 @@ const state = {
 
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 15, normal: 16, large: 18 };
-  const fontSize = Number.isFinite(Number(saved.fontSize))
-    ? Number(saved.fontSize)
-    : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
+  const preferredSize = Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
   return {
     ...DEFAULT_SETTINGS,
     ...saved,
     font: FONTS.some((font) => font.id === saved.font) ? saved.font : DEFAULT_SETTINGS.font,
-    fontSize: Math.min(22, Math.max(14, Math.round(fontSize))),
+    fontSize: Math.min(22, Math.max(14, Math.round(preferredSize))),
   };
 }
 
-const escapeHtml = (value = "") =>
-  String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+const escapeHtml = (value = "") => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
 const stripHtml = (value = "") => {
   const shell = document.createElement("div");
@@ -90,20 +78,16 @@ const storage = {
     try {
       window.localStorage.setItem(key, serialised);
     } catch {
-      // The native Preferences value remains available if browser storage is unavailable.
+      // Native Preferences still holds the setting when browser storage is unavailable.
     }
   },
 };
 
 function log(event, detail = "") {
-  const entry = {
-    time: new Date().toISOString(),
-    event,
-    detail: typeof detail === "string" ? detail : JSON.stringify(detail),
-  };
+  const entry = { time: new Date().toISOString(), event, detail: typeof detail === "string" ? detail : JSON.stringify(detail) };
   state.logs = [entry, ...state.logs].slice(0, LIMITS.logs);
   void storage.set(KEYS.logs, state.logs);
-  if (state.activeTab === "debug") render();
+  if (state.activeTab === "debug" && !state.article) render();
 }
 
 function safeUrlForLog(value) {
@@ -117,9 +101,7 @@ function safeUrlForLog(value) {
 
 function formatDate(value) {
   try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
-      new Date(value),
-    );
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
   } catch {
     return "Saved";
   }
@@ -127,9 +109,7 @@ function formatDate(value) {
 
 function formatClock(value) {
   try {
-    return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }).format(
-      new Date(value),
-    );
+    return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
   } catch {
     return "--:--";
   }
@@ -152,43 +132,23 @@ function resolveArticleImageUrl(candidate, baseUrl) {
 }
 
 function bestSrcsetCandidate(value = "") {
-  const entries = value
+  return value
     .split(",")
     .map((entry) => entry.trim().split(/\s+/))
     .filter(([url]) => Boolean(url))
-    .map(([url, descriptor = "1x"]) => ({
-      url,
-      score: Number.parseFloat(descriptor) || 1,
-    }));
-  return entries.sort((a, b) => b.score - a.score)[0]?.url || "";
+    .map(([url, descriptor = "1x"]) => ({ url, score: Number.parseFloat(descriptor) || 1 }))
+    .sort((a, b) => b.score - a.score)[0]?.url || "";
 }
 
 function imageCandidate(image, baseUrl) {
-  const candidates = [
-    image.getAttribute("data-src"),
-    image.getAttribute("data-original"),
-    image.getAttribute("data-lazy-src"),
-    image.getAttribute("data-image"),
-    bestSrcsetCandidate(image.getAttribute("data-srcset") || ""),
-    bestSrcsetCandidate(image.getAttribute("srcset") || ""),
-    image.getAttribute("src"),
-  ];
+  const candidates = [image.getAttribute("data-src"), image.getAttribute("data-original"), image.getAttribute("data-lazy-src"), image.getAttribute("data-image"), bestSrcsetCandidate(image.getAttribute("data-srcset") || ""), bestSrcsetCandidate(image.getAttribute("srcset") || ""), image.getAttribute("src")];
   return candidates.map((candidate) => resolveArticleImageUrl(candidate || "", baseUrl)).find(Boolean) || "";
 }
 
 function openGraphHeroImage(doc, baseUrl, title) {
-  const metaCandidates = [
-    "meta[property='og:image']",
-    "meta[name='twitter:image']",
-    "meta[name='twitter:image:src']",
-    "meta[itemprop='image']",
-  ];
-  const candidate = metaCandidates
-    .map((selector) => doc.querySelector(selector)?.getAttribute("content"))
-    .find(Boolean);
+  const candidate = ["meta[property='og:image']", "meta[name='twitter:image']", "meta[name='twitter:image:src']", "meta[itemprop='image']"].map((selector) => doc.querySelector(selector)?.getAttribute("content")).find(Boolean);
   const src = resolveArticleImageUrl(candidate || "", baseUrl);
-  if (!src) return "";
-  return `<figure class="article-hero"><img src="${escapeHtml(src)}" alt="${escapeHtml(title)}" loading="eager" decoding="async" /></figure>`;
+  return src ? `<figure class="article-hero"><img src="${escapeHtml(src)}" alt="${escapeHtml(title)}" loading="eager" decoding="async" /></figure>` : "";
 }
 
 function normalizeArticleImages(html, baseUrl, heroFallback = "") {
@@ -196,22 +156,14 @@ function normalizeArticleImages(html, baseUrl, heroFallback = "") {
   container.innerHTML = html;
   container.querySelectorAll("img").forEach((image) => {
     const candidate = imageCandidate(image, baseUrl);
-
     if (!candidate) {
       image.remove();
       return;
     }
-
     image.setAttribute("src", candidate);
     image.setAttribute("loading", image.closest("figure") ? "eager" : "lazy");
     image.setAttribute("decoding", "async");
-    image.removeAttribute("srcset");
-    image.removeAttribute("data-srcset");
-    image.removeAttribute("sizes");
-    image.removeAttribute("data-src");
-    image.removeAttribute("data-original");
-    image.removeAttribute("data-lazy-src");
-    image.removeAttribute("data-image");
+    ["srcset", "data-srcset", "sizes", "data-src", "data-original", "data-lazy-src", "data-image"].forEach((attribute) => image.removeAttribute(attribute));
   });
   if (!container.querySelector("img") && heroFallback) container.insertAdjacentHTML("afterbegin", heroFallback);
   return container.innerHTML;
@@ -231,6 +183,45 @@ function uniqueId() {
   return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function applySettings() {
+  const root = document.documentElement;
+  root.dataset.theme = state.settings.theme;
+  root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
+  root.classList.toggle("dark", state.settings.theme === "dark");
+  const article = document.querySelector(".article-reading");
+  if (article) article.dataset.font = state.settings.font;
+}
+
+function syncPreferenceControls() {
+  document.querySelectorAll("[data-action='set-font']").forEach((control) => control.classList.toggle("is-active", control.dataset.font === state.settings.font));
+  document.querySelectorAll("[data-action='set-theme']").forEach((control) => control.classList.toggle("is-active", control.dataset.theme === state.settings.theme));
+  document.querySelectorAll("[data-setting-size]").forEach((label) => {
+    label.textContent = `${state.settings.fontSize}px`;
+  });
+  const decrease = document.querySelector("[data-action='change-size'][data-delta='-1']");
+  const increase = document.querySelector("[data-action='change-size'][data-delta='1']");
+  if (decrease) decrease.disabled = state.settings.fontSize <= 14;
+  if (increase) increase.disabled = state.settings.fontSize >= 22;
+}
+
+async function persistSettings() {
+  applySettings();
+  syncPreferenceControls();
+  await storage.set(KEYS.settings, state.settings);
+  log("settings.updated", state.settings);
+}
+
+function syncFocusMode() {
+  document.querySelector(".reader-view")?.classList.toggle("is-focus", state.focusMode);
+}
+
+function setFocusMode(next) {
+  state.focusMode = next;
+  syncFocusMode();
+  const announce = document.querySelector(".focus-announce");
+  if (announce) announce.textContent = next ? "Focus mode on. Tap the article again to show controls." : "Reader controls shown.";
+}
+
 function showToast(message, type = "neutral") {
   state.toast = { message, type };
   render();
@@ -238,27 +229,11 @@ function showToast(message, type = "neutral") {
   showToast.timeout = window.setTimeout(() => {
     state.toast = null;
     render();
-  }, 3600);
-}
-
-function applySettings() {
-  const root = document.documentElement;
-  root.dataset.theme = state.settings.theme;
-  root.dataset.font = state.settings.font;
-  root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
-  root.classList.toggle("dark", state.settings.theme === "dark");
-}
-
-async function persistSettings() {
-  applySettings();
-  await storage.set(KEYS.settings, state.settings);
-  log("settings.updated", state.settings);
-  render();
+  }, 3200);
 }
 
 async function saveArticle(article) {
-  const withoutDuplicate = state.articles.filter((saved) => saved.url !== article.url);
-  state.articles = [article, ...withoutDuplicate].slice(0, LIMITS.articles);
+  state.articles = [article, ...state.articles.filter((saved) => saved.url !== article.url)].slice(0, LIMITS.articles);
   await storage.set(KEYS.articles, state.articles);
   log("article.saved", { source: article.source, title: article.title.slice(0, 80) });
 }
@@ -267,12 +242,9 @@ async function fetchRawHtml(url) {
   if (Capacitor.isNativePlatform()) {
     log("fetch.native.start", safeUrlForLog(url));
     const response = await CapacitorHttp.get({ url, responseType: "text", connectTimeout: 30000, readTimeout: 30000 });
-    if (response.status < 200 || response.status >= 400) {
-      throw new Error(`Native request returned HTTP ${response.status}`);
-    }
+    if (response.status < 200 || response.status >= 400) throw new Error(`Native request returned HTTP ${response.status}`);
     return typeof response.data === "string" ? response.data : String(response.data || "");
   }
-
   log("fetch.web.start", `${safeUrlForLog(url)} · browser fallback`);
   const response = await fetch(url, { headers: { Accept: "text/html,application/xhtml+xml" } });
   if (!response.ok) throw new Error(`Browser request returned HTTP ${response.status}`);
@@ -285,12 +257,9 @@ async function extractArticle(url) {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   const parsed = new Readability(doc, { keepClasses: false, charThreshold: 140 }).parse();
   if (!parsed?.content || !parsed?.title) throw new Error("Readability could not identify a full article in this page.");
-
-  const heroFallback = openGraphHeroImage(doc, url, parsed.title.trim());
-  const content = sanitizeArticleHtml(parsed.content, url, heroFallback);
+  const content = sanitizeArticleHtml(parsed.content, url, openGraphHeroImage(doc, url, parsed.title.trim()));
   const text = stripHtml(content);
   if (text.length < 120) throw new Error("The extracted text was too short to save as an article.");
-
   const source = (() => {
     try {
       return new URL(url).hostname.replace(/^www\./, "");
@@ -298,193 +267,83 @@ async function extractArticle(url) {
       return "Saved page";
     }
   })();
-
-  const article = {
-    id: uniqueId(),
-    url,
-    title: parsed.title.trim(),
-    byline: parsed.byline?.trim() || source,
-    source,
-    content,
-    excerpt: parsed.excerpt?.trim() || text.slice(0, 220),
-    readingMinutes: minutesFor(text),
-    dateAdded: new Date().toISOString(),
-  };
+  const article = { id: uniqueId(), url, title: parsed.title.trim(), byline: parsed.byline?.trim() || source, source, content, excerpt: parsed.excerpt?.trim() || text.slice(0, 220), readingMinutes: minutesFor(text), dateAdded: new Date().toISOString() };
   const imageCount = new DOMParser().parseFromString(content, "text/html").images.length;
   log("extract.images.prepared", `${imageCount} image${imageCount === 1 ? "" : "s"} ready`);
   log("extract.parse.success", `${article.readingMinutes} min · ${text.length.toLocaleString()} chars`);
   return article;
 }
 
-function icon(name, size = 18) {
-  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+function icon(name, size = 20) {
+  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
   const paths = {
     plus: "<path d=\"M12 5v14M5 12h14\"/>",
     arrowLeft: "<path d=\"M19 12H5M12 19l-7-7 7-7\"/>",
     settings: "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56v.08h-3v-.08a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.56-1.03h-.08v-3h.08A1.7 1.7 0 0 0 7 9.94a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0 0 10.66 6a1.7 1.7 0 0 0 1.03-1.56v-.08h3v.08A1.7 1.7 0 0 0 15.72 6a1.7 1.7 0 0 0 1.88-.34l.06-.06L19.78 7.7l-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z\"/>",
     bookmark: "<path d=\"M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V22l-6-3.5L6 22V4.5Z\"/>",
-    copy: "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"1\"/><path d=\"M5 15V5a1 1 0 0 1 1-1h10\"/>",
+    copy: "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"2\"/><path d=\"M5 15V5a1 1 0 0 1 1-1h10\"/>",
     book: "<path d=\"M4.5 5.5A2.5 2.5 0 0 1 7 3h4v16H7a2.5 2.5 0 0 0-2.5 2V5.5ZM19.5 5.5A2.5 2.5 0 0 0 17 3h-4v16h4a2.5 2.5 0 0 1 2.5 2V5.5Z\"/>",
     terminal: "<path d=\"m5 7 4 5-4 5M12 17h7\"/>",
     mark: "<path d=\"M4 4.5h6.15A3.85 3.85 0 0 1 14 8.35V20H7.85A3.85 3.85 0 0 0 4 23V4.5Z\"/><path d=\"M20 4.5h-6.15A3.85 3.85 0 0 0 10 8.35V20h6.15A3.85 3.85 0 0 1 20 23V4.5Z\"/>",
-    diagnostic: "<path d=\"M6 5h12M6 12h8M6 19h12\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"1\"/><circle cx=\"16\" cy=\"12\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/>",
-    sun: "<circle cx=\"12\" cy=\"12\" r=\"3.25\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/>",
-    moon: "<path d=\"M20.6 14.4A8.8 8.8 0 0 1 9.6 3.4 8.8 8.8 0 1 0 20.6 14.4Z\"/>",
+    home: "<path d=\"m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z\"/>",
+    archive: "<path d=\"M4 6h16v14H4z\"/><path d=\"M3 3h18v3H3zM9 11h6\"/>",
     chevron: "<path d=\"m9 18 6-6-6-6\"/>",
     external: "<path d=\"M14 5h5v5M19 5l-8 8\"/><path d=\"M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4\"/>",
+    sun: "<circle cx=\"12\" cy=\"12\" r=\"3.25\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/>",
+    moon: "<path d=\"M20.6 14.4A8.8 8.8 0 0 1 9.6 3.4 8.8 8.8 0 1 0 20.6 14.4Z\"/>",
   };
   return `<svg ${attrs}>${paths[name] || ""}</svg>`;
 }
 
 function logoMarkup(compact = false) {
-  return `<div class="brand ${compact ? "brand--compact" : ""}" aria-label="whitemint reader">
-    <span class="brand__mark" aria-hidden="true">${icon("mark", 30)}</span>
-    ${compact ? "" : "<span class=\"brand__name\">whitemint</span>"}
-  </div>`;
+  return `<div class="brand ${compact ? "brand--compact" : ""}" aria-label="whitemint reader"><span class="brand__mark" aria-hidden="true">${icon("mark", compact ? 21 : 25)}</span>${compact ? "" : "<span class=\"brand__name\">whitemint</span>"}</div>`;
 }
 
-function tabMarkup() {
-  return `<nav class="section-tabs" aria-label="Primary navigation">
-    <button class="section-tab ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("book", 15)}<span>Reader</span></button>
-    <button class="section-tab ${state.activeTab === "debug" ? "is-active" : ""}" data-action="show-debug">${icon("terminal", 15)}<span>Debug</span>${state.logs.length ? `<b>${state.logs.length}</b>` : ""}</button>
+function bottomNavigationMarkup() {
+  return `<nav class="bottom-navigation" aria-label="Primary navigation">
+    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Reader</span></button>
+    <button class="bottom-navigation__add" data-action="scroll-capture" aria-label="Add a reading">${icon("plus", 23)}</button>
+    <button class="bottom-navigation__item ${state.activeTab === "debug" ? "is-active" : ""}" data-action="show-debug">${icon("terminal", 21)}<span>Debug</span></button>
   </nav>`;
 }
 
-function emptyLibraryMarkup() {
-  return `<section class="empty-state" aria-labelledby="empty-title">
-    <div class="empty-state__index"><span>Index / 00</span><span>Archive capacity 50</span></div>
-    <span class="empty-state__mark" aria-hidden="true">${icon("mark", 60)}</span>
-    <p class="eyebrow">Your reading shelf</p>
-    <h2 id="empty-title">Nothing saved yet.</h2>
-    <p>Paste a direct article link above. whitemint will keep only the words worth returning to.</p>
-  </section>`;
-}
-
 function articleListMarkup() {
-  if (!state.articles.length) return emptyLibraryMarkup();
-  return `<section class="article-list" aria-label="Saved articles">
-    <div class="list-label"><span>Saved reading</span><span>${state.articles.length} / ${LIMITS.articles}</span></div>
-    ${state.articles
-      .map(
-        (article, index) => `<button class="article-item" data-action="open-article" data-id="${article.id}">
-          <span class="article-item__number">${String(index + 1).padStart(2, "0")}</span>
-          <span class="article-item__content">
-            <span class="article-item__title">${escapeHtml(article.title)}</span>
-            <span class="article-item__meta"><span>${escapeHtml(article.source)}</span><i></i><span>${article.readingMinutes} min</span><i></i><span>${formatDate(article.dateAdded)}</span></span>
-          </span>
-          <span class="article-item__arrow">${icon("chevron", 15)}</span>
-        </button>`,
-      )
-      .join("")}
-  </section>`;
+  if (!state.articles.length) {
+    return `<section class="empty-library"><span class="empty-library__icon">${icon("archive", 30)}</span><div><h2>Your shelf is ready.</h2><p>Save a good article and it will appear here for later.</p></div></section>`;
+  }
+  return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>Saved reading</p><h2>On your shelf</h2></div><span>${state.articles.length} saved</span></div><div class="article-card-list">${state.articles.map((article) => `<button class="article-card" data-action="open-article" data-id="${article.id}"><span class="article-card__number">${String(state.articles.indexOf(article) + 1).padStart(2, "0")}</span><span class="article-card__copy"><strong>${escapeHtml(article.title)}</strong><small>${escapeHtml(article.source)} · ${article.readingMinutes} min · ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 17)}</span></button>`).join("")}</div></section>`;
 }
 
 function libraryMarkup() {
+  const savedMinutes = state.articles.reduce((sum, article) => sum + Number(article.readingMinutes || 0), 0);
   const busy = state.busy ? "is-busy" : "";
-  return `<main class="screen screen--library">
-    <header class="app-header">
-      ${logoMarkup()}
-      <div class="app-header__aside"><span class="status-dot"></span><span>Private archive</span></div>
-    </header>
-    ${tabMarkup()}
-    <section class="capture" aria-labelledby="capture-label">
-      <p class="eyebrow" id="capture-label">Add an article</p>
-      <form class="capture__form" id="capture-form">
-        <label class="sr-only" for="article-url">Article URL</label>
-        <input id="article-url" name="article-url" type="url" autocomplete="url" placeholder="Paste an article URL…" ${state.busy ? "disabled" : ""} />
-        <button class="icon-button capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>
-          ${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 19)}
-        </button>
-      </form>
-      <p class="capture__note">In Android, pages are retrieved by the native networking layer before cleaning.</p>
-    </section>
+  return `<main class="dashboard-screen screen--library">
+    <header class="dashboard-topbar"><button class="profile-tile" aria-label="whitemint library">${icon("mark", 23)}</button>${logoMarkup()}<button class="topbar-action" data-action="show-debug" aria-label="Open debug">${icon("terminal", 20)}</button></header>
+    <section class="welcome-copy"><p>Private reading archive</p><h1>Make room for<br /><em>the good stuff.</em></h1></section>
+    <section class="mint-glance" aria-label="Reading archive summary"><div class="mint-glance__count"><strong>${state.articles.length}</strong><span>of ${LIMITS.articles}</span></div><div><h2>Your shelf is growing</h2><p>${state.articles.length ? `${savedMinutes} minutes of saved reading` : "Save links you want to return to"}</p></div><span class="mint-glance__arrow">${icon("chevron", 20)}</span></section>
+    <section class="save-card" id="save-card" aria-labelledby="save-title"><div class="save-card__heading"><span class="save-card__icon">${icon("plus", 19)}</span><div><p>Add a reading</p><h2 id="save-title">Save a web article</h2></div></div><form class="capture__form" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" placeholder="Paste an article URL" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 20)}</button></form><p class="save-card__note">Cleaned privately on your device with native fetching.</p></section>
     ${articleListMarkup()}
-  </main>`;
+  </main>${bottomNavigationMarkup()}`;
 }
 
 function debugMarkup() {
-  const nativeStatus = Capacitor.isNativePlatform() ? "Android native transport active" : "Browser preview · native transport activates in APK";
-  const copyLabel = state.logs.length ? "Copy diagnostic log" : "Copy blank diagnostic log";
-  return `<main class="screen screen--debug">
-    <header class="app-header">
-      ${logoMarkup()}
-      <button class="tiny-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear</button>
-    </header>
-    ${tabMarkup()}
-    <section class="debug-intro">
-      <span class="debug-intro__mark" aria-hidden="true">${icon("diagnostic", 47)}</span>
-      <div>
-        <p class="eyebrow">Diagnostic export</p>
-        <h1>Keep the signal clear.</h1>
-        <p>Copy this log and paste it here with the page URL if an article will not save.</p>
-      </div>
-    </section>
-    <section class="diagnostic-card" aria-label="Runtime status">
-      <div><span class="diagnostic-card__label">Transport</span><strong>${escapeHtml(nativeStatus)}</strong></div>
-      <div><span class="diagnostic-card__label">Saved pages</span><strong>${state.articles.length} of ${LIMITS.articles}</strong></div>
-      <div><span class="diagnostic-card__label">App store</span><strong>Device preferences + local backup</strong></div>
-    </section>
-    <div class="debug-actions">
-      <button class="copy-button" data-action="copy-logs">${icon("copy", 17)}<span>${copyLabel}</span></button>
-      <span>${state.logs.length} event${state.logs.length === 1 ? "" : "s"}</span>
-    </div>
-    <section class="log-shell" aria-live="polite">
-      ${
-        state.logs.length
-          ? state.logs
-              .map(
-                (entry) => `<article class="log-entry"><time>${formatClock(entry.time)}</time><div><strong>${escapeHtml(entry.event)}</strong><p>${escapeHtml(entry.detail || "—")}</p></div></article>`,
-              )
-              .join("")
-          : `<div class="log-empty"><span>${icon("terminal", 20)}</span><p>No events yet. The app will record extraction, storage, and settings events here.</p></div>`
-      }
-    </section>
-  </main>`;
+  const nativeStatus = Capacitor.isNativePlatform() ? "Native Android transport" : "Browser preview";
+  return `<main class="dashboard-screen debug-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<button class="topbar-action" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear</button></header><section class="welcome-copy welcome-copy--compact"><p>Diagnostics</p><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>${escapeHtml(nativeStatus)}</strong><small>${state.articles.length} saved articles · ${state.logs.length} events</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Copy diagnostic log</strong><small>Paste it here whenever something feels off.</small></span>${icon("chevron", 18)}</button><section class="log-feed" aria-live="polite"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><span>${state.logs.length}</span></div>${state.logs.length ? state.logs.map((entry) => `<article class="log-row"><time>${formatClock(entry.time)}</time><div><strong>${escapeHtml(entry.event)}</strong><p>${escapeHtml(entry.detail || "—")}</p></div></article>`).join("") : "<p class=\"log-empty\">No events yet. Saving a reading will start the log.</p>"}</section></main>${bottomNavigationMarkup()}`;
 }
 
 function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
-  return `<main class="reader-view">
-    <header class="reader-toolbar">
-      <button class="toolbar-button" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 20)}</button>
-      <div class="reader-toolbar__identity">${logoMarkup(true)}<span>Reading view</span></div>
-      <div class="reader-toolbar__actions">
-        <button class="toolbar-button" data-action="open-settings" aria-label="Reading settings">${icon("settings", 18)}</button>
-        <button class="toolbar-button" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 18)}</button>
-      </div>
-    </header>
-    <section class="reader-scroll-surface" aria-label="Article reader">
-      <article class="article-reading" data-font="${state.settings.font}">
-        <p class="article-reading__source">${escapeHtml(article.source)}</p>
-        <h1>${escapeHtml(article.title)}</h1>
-        <div class="article-reading__meta"><span>${escapeHtml(article.byline)}</span><i></i><span>${article.readingMinutes} min read</span><i></i><span>${formatDate(article.dateAdded)}</span></div>
-        <div class="article-reading__rule"></div>
-        <div class="article-reading__body">${article.content}</div>
-        <footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 14)}</a></footer>
-      </article>
-    </section>
-  </main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity">${logoMarkup(true)}<span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><p class="article-reading__source">${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>${escapeHtml(article.byline)}</span><i></i><span>${article.readingMinutes} min read</span><i></i><span>${formatDate(article.dateAdded)}</span></div><div class="article-reading__rule"></div><div class="article-reading__body">${article.content}</div><footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 14)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
-  return FONTS
-    .map(
-      (font) => `<button class="setting-choice font-choice ${state.settings.font === font.id ? "is-active" : ""}" data-action="set-font" data-font="${font.id}" style="--choice-font:${font.family}"><span>Aa</span><small>${font.label}</small></button>`,
-    )
-    .join("");
+  return FONTS.map((font) => `<button class="font-chip ${state.settings.font === font.id ? "is-active" : ""}" data-action="set-font" data-font="${font.id}" style="--choice-font:${font.family}"><span>Aa</span><small>${font.label}</small></button>`).join("");
 }
 
 function settingsMarkup() {
   if (!state.settingsOpen) return "";
-  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div>
-  <section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <div class="sheet-handle"></div>
-    <header class="sheet-header"><div><p class="eyebrow">Reading preferences</p><h2 id="settings-title">Set the page your way.</h2></div><button class="tiny-button" data-action="close-settings">Done</button></header>
-    <div class="settings-section"><p class="setting-label">Typeface</p><div class="choice-grid choice-grid--fonts">${fontOptionsMarkup()}</div><p class="setting-hint">Choose a typeface directly. Your choice is saved for every article.</p></div>
-    <div class="settings-section"><div class="setting-label-row"><p class="setting-label">Size</p><span>${state.settings.fontSize}px</span></div><div class="type-scale-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" aria-label="Decrease reading size" ${state.settings.fontSize <= 14 ? "disabled" : ""}>A−</button><p>Adjust reading size</p><button class="type-scale-button" data-action="change-size" data-delta="1" aria-label="Increase reading size" ${state.settings.fontSize >= 22 ? "disabled" : ""}>A+</button></div></div>
-    <div class="settings-section"><p class="setting-label">Theme</p><div class="choice-grid choice-grid--two"><button class="setting-choice theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 16)}<span>Light</span></button><button class="setting-choice theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 16)}<span>Dark</span></button></div></div>
-  </section>`;
+  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Make it yours.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header><div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-section"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="type-scale-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" aria-label="Decrease reading size" ${state.settings.fontSize <= 14 ? "disabled" : ""}>A−</button><p>Comfortable reading</p><button class="type-scale-button" data-action="change-size" data-delta="1" aria-label="Increase reading size" ${state.settings.fontSize >= 22 ? "disabled" : ""}>A+</button></div></div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button></div></div></section>`;
 }
 
 function toastMarkup() {
@@ -493,15 +352,17 @@ function toastMarkup() {
 }
 
 function render() {
-  applySettings();
   const root = document.querySelector("#root");
-  const contents = state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup();
-  root.innerHTML = `<div class="app-shell">${contents}${toastMarkup()}</div>`;
+  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${toastMarkup()}</div>`;
+  applySettings();
+  if (state.article) requestAnimationFrame(() => {
+    const surface = document.querySelector(".reader-scroll-surface");
+    if (surface) surface.scrollTop = state.articleScrollTop;
+  });
 }
 
 async function handleExtract(form) {
-  const formData = new FormData(form);
-  const url = String(formData.get("article-url") || "").trim();
+  const url = String(new FormData(form).get("article-url") || "").trim();
   let checkedUrl;
   try {
     checkedUrl = new URL(url);
@@ -512,18 +373,18 @@ async function handleExtract(form) {
     showToast(message, "error");
     return;
   }
-
   state.busy = true;
   render();
   try {
     const article = await extractArticle(checkedUrl.toString());
     await saveArticle(article);
     state.article = article;
-    showToast("Article saved to your reading shelf.", "success");
+    state.articleScrollTop = 0;
+    state.focusMode = false;
+    showToast("Saved to your reading shelf.", "success");
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown extraction error";
-    log("fetch.failed", `${safeUrlForLog(url)} · ${message}`);
-    showToast("Couldn’t extract this article. Copy the diagnostic log if you want help.", "error");
+    log("fetch.failed", `${safeUrlForLog(url)} · ${error instanceof Error ? error.message : "Unknown extraction error"}`);
+    showToast("Couldn’t save this article. Check the diagnostic log if it continues.", "error");
   } finally {
     state.busy = false;
     render();
@@ -531,23 +392,11 @@ async function handleExtract(form) {
 }
 
 function buildLogExport() {
-  const summary = {
-    app: "whitemint",
-    exportedAt: new Date().toISOString(),
-    platform: Capacitor.getPlatform(),
-    nativeTransport: Capacitor.isNativePlatform(),
-    savedArticleCount: state.articles.length,
-    settings: state.settings,
-    events: state.logs,
-  };
-  return `WHITEMINT DIAGNOSTIC LOG\n${"=".repeat(27)}\n${JSON.stringify(summary, null, 2)}`;
+  return `WHITEMINT DIAGNOSTIC LOG\n${"=".repeat(27)}\n${JSON.stringify({ app: "whitemint", exportedAt: new Date().toISOString(), platform: Capacitor.getPlatform(), nativeTransport: Capacitor.isNativePlatform(), savedArticleCount: state.articles.length, settings: state.settings, events: state.logs }, null, 2)}`;
 }
 
 async function copyText(text) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.style.position = "fixed";
@@ -558,36 +407,71 @@ async function copyText(text) {
   textarea.remove();
 }
 
+function scrollToCapture() {
+  if (state.article || state.activeTab !== "library") {
+    state.article = null;
+    state.focusMode = false;
+    state.activeTab = "library";
+    render();
+  }
+  requestAnimationFrame(() => document.querySelector("#save-card")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+}
+
+function navigateBack() {
+  if (state.settingsOpen) {
+    state.settingsOpen = false;
+    render();
+    return true;
+  }
+  if (state.focusMode) {
+    setFocusMode(false);
+    return true;
+  }
+  if (state.article) {
+    state.article = null;
+    state.articleScrollTop = 0;
+    state.activeTab = "library";
+    render();
+    return true;
+  }
+  if (state.activeTab !== "library") {
+    state.activeTab = "library";
+    render();
+    return true;
+  }
+  return false;
+}
+
 async function handleAction(target) {
   const action = target.dataset.action;
   if (!action) return;
-
   if (action === "show-library") {
     state.activeTab = "library";
     state.article = null;
+    state.focusMode = false;
     render();
     return;
   }
   if (action === "show-debug") {
     state.activeTab = "debug";
     state.article = null;
+    state.focusMode = false;
     log("debug.opened", "User opened diagnostics");
     render();
     return;
   }
+  if (action === "scroll-capture") return scrollToCapture();
   if (action === "open-article") {
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
+    state.articleScrollTop = 0;
+    state.focusMode = false;
     if (state.article) log("article.opened", state.article.title.slice(0, 80));
     render();
     return;
   }
-  if (action === "back-library") {
-    state.article = null;
-    state.activeTab = "library";
-    render();
-    return;
-  }
+  if (action === "back-library") return navigateBack();
   if (action === "open-settings") {
+    state.focusMode = false;
     state.settingsOpen = true;
     render();
     return;
@@ -603,8 +487,7 @@ async function handleAction(target) {
     return;
   }
   if (action === "change-size") {
-    const delta = Number(target.dataset.delta);
-    state.settings.fontSize = Math.min(22, Math.max(14, state.settings.fontSize + delta));
+    state.settings.fontSize = Math.min(22, Math.max(14, state.settings.fontSize + Number(target.dataset.delta)));
     await persistSettings();
     return;
   }
@@ -628,17 +511,17 @@ async function handleAction(target) {
     try {
       await copyText(buildLogExport());
       log("debug.copied", "Diagnostic log copied to clipboard");
-      showToast("Diagnostic log copied. Paste it here with the link you tried.", "success");
+      showToast("Diagnostic log copied.", "success");
     } catch (error) {
       log("debug.copy.failed", error instanceof Error ? error.message : "Clipboard error");
-      showToast("Couldn’t copy the log. Try again after selecting it.", "error");
+      showToast("Couldn’t copy the log.", "error");
     }
     return;
   }
   if (action === "clear-logs") {
     state.logs = [];
     await storage.set(KEYS.logs, []);
-    showToast("Diagnostic log cleared.", "neutral");
+    showToast("Diagnostic log cleared.");
     return;
   }
   if (action === "dismiss-toast") {
@@ -654,55 +537,64 @@ document.addEventListener("submit", (event) => {
   }
 });
 
+document.addEventListener("scroll", (event) => {
+  if (event.target instanceof Element && event.target.matches(".reader-scroll-surface")) state.articleScrollTop = event.target.scrollTop;
+}, true);
+
 document.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action]");
-  if (target) void handleAction(target);
+  const actionTarget = event.target.closest("[data-action]");
+  if (actionTarget) {
+    void handleAction(actionTarget);
+    return;
+  }
+  const readerSurface = event.target.closest(".reader-scroll-surface");
+  const protectedTarget = event.target.closest("a, button, input, textarea, select, img, figure, figcaption");
+  if (state.article && readerSurface && !protectedTarget) {
+    const bounds = readerSurface.getBoundingClientRect();
+    const isCenterTap = event.clientY > bounds.top + 44 && event.clientY < bounds.bottom - 44;
+    if (isCenterTap) setFocusMode(!state.focusMode);
+  }
 });
 
-document.addEventListener(
-  "load",
-  (event) => {
-    const image = event.target;
-    if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.loaded) return;
-    image.dataset.loaded = "true";
-    const source = safeUrlForLog(image.currentSrc || image.src);
-    if (state.loggedImageUrls.has(source)) return;
-    state.loggedImageUrls.add(source);
-    log("article.image.loaded", source);
-  },
-  true,
-);
+document.addEventListener("load", (event) => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.loaded) return;
+  image.dataset.loaded = "true";
+  const source = safeUrlForLog(image.currentSrc || image.src);
+  if (state.loggedImageUrls.has(source)) return;
+  state.loggedImageUrls.add(source);
+  log("article.image.loaded", source);
+}, true);
 
-document.addEventListener(
-  "error",
-  (event) => {
-    const image = event.target;
-    if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.failed) return;
-    image.dataset.failed = "true";
-    const fallback = document.createElement("span");
-    fallback.className = "article-image-fallback";
-    fallback.textContent = image.alt ? `Image unavailable — ${image.alt}` : "Image unavailable";
-    image.replaceWith(fallback);
-    log("article.image.failed", safeUrlForLog(image.currentSrc || image.src));
-  },
-  true,
-);
+document.addEventListener("error", (event) => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.failed) return;
+  image.dataset.failed = "true";
+  const fallback = document.createElement("span");
+  fallback.className = "article-image-fallback";
+  fallback.textContent = image.alt ? `Image unavailable — ${image.alt}` : "Image unavailable";
+  image.replaceWith(fallback);
+  log("article.image.failed", safeUrlForLog(image.currentSrc || image.src));
+}, true);
+
+async function setupNativeBackHandling() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await CapacitorApp.addListener("backButton", () => {
+      if (!navigateBack()) CapacitorApp.exitApp();
+    });
+  } catch (error) {
+    log("navigation.native.failed", error instanceof Error ? error.message : "Native back listener unavailable");
+  }
+}
 
 async function init() {
-  [state.articles, state.settings, state.logs] = await Promise.all([
-    storage.get(KEYS.articles, []),
-    storage.get(KEYS.settings, DEFAULT_SETTINGS),
-    storage.get(KEYS.logs, []),
-  ]);
+  [state.articles, state.settings, state.logs] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get(KEYS.logs, [])]);
   state.settings = normalizeSettings(state.settings);
-  state.articles = Array.isArray(state.articles)
-    ? state.articles.slice(0, LIMITS.articles).map((article) => ({
-        ...article,
-        content: sanitizeArticleHtml(article.content || "", article.url || ""),
-      }))
-    : [];
+  state.articles = Array.isArray(state.articles) ? state.articles.slice(0, LIMITS.articles).map((article) => ({ ...article, content: sanitizeArticleHtml(article.content || "", article.url || "") })) : [];
   state.logs = Array.isArray(state.logs) ? state.logs.slice(0, LIMITS.logs) : [];
   log("app.ready", `${Capacitor.getPlatform()} · ${Capacitor.isNativePlatform() ? "native HTTP ready" : "web preview"}`);
+  await setupNativeBackHandling();
   render();
 }
 
