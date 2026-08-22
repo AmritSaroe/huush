@@ -57,4 +57,4 @@
 - [x] Open a focused add-reading sheet from the persistent bottom plus button.
 - [x] Simplify the library header and saved-reading hierarchy so articles take visual priority.
 - [x] Preserve native extraction, diagnostics, themes, focus mode, and Android back behavior through the new capture flow.
-- [ ] Build and provide a streamlined Android APK for testing.
+- [x] Build and provide a streamlined Android APK for testing.
