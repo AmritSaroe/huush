@@ -5,3 +5,11 @@
 - [x] Resolve relative article-image URLs to absolute URLs before article storage.
 - [x] Add responsive reader styles for article images, captions, and failed-image handling.
 - [x] Rebuild the Capacitor Android APK through GitHub Actions and provide the corrected artifact for testing.
+
+## Current corrective release
+
+- [x] Prevent unintended pinch zoom, overscroll bounce, horizontal panning, and text-size inflation in the Android reader surface.
+- [x] Replace the unstable cycling font UI with direct font choices, add Nunito, and remove Lora.
+- [x] Replace the fixed size presets with direct A− and A+ reading-size controls.
+- [x] Improve discovery of responsive, lazy-loaded, and hero images during article extraction.
+- [ ] Rebuild the Android APK and provide the updated artifact for focused mobile retesting.

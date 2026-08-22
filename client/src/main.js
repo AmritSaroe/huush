@@ -16,13 +16,13 @@ const KEYS = {
 
 const LIMITS = { articles: 50, logs: 160 };
 
-const DEFAULT_SETTINGS = { theme: "light", font: "sans", size: "normal" };
+const DEFAULT_SETTINGS = { theme: "light", font: "sans", fontSize: 16 };
 
 const FONTS = [
   { id: "sans", label: "Inter", family: "var(--font-sans)" },
   { id: "merriweather", label: "Merriweather", family: "var(--font-serif)" },
-  { id: "lora", label: "Lora", family: "var(--font-serif-2)" },
   { id: "source-serif", label: "Source Serif", family: "var(--font-serif-3)" },
+  { id: "nunito", label: "Nunito", family: "var(--font-nunito)" },
   { id: "mono", label: "JetBrains", family: "var(--font-mono)" },
 ];
 
@@ -36,6 +36,19 @@ const state = {
   busy: false,
   toast: null,
 };
+
+function normalizeSettings(saved = {}) {
+  const legacySizes = { small: 15, normal: 16, large: 18 };
+  const fontSize = Number.isFinite(Number(saved.fontSize))
+    ? Number(saved.fontSize)
+    : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...saved,
+    font: FONTS.some((font) => font.id === saved.font) ? saved.font : DEFAULT_SETTINGS.font,
+    fontSize: Math.min(22, Math.max(14, Math.round(fontSize))),
+  };
+}
 
 const escapeHtml = (value = "") =>
   String(value)
@@ -125,43 +138,86 @@ function minutesFor(text) {
   return Math.max(1, Math.ceil(text.trim().split(/\s+/).filter(Boolean).length / 225));
 }
 
-function normalizeArticleImages(html, baseUrl) {
+function resolveArticleImageUrl(candidate, baseUrl) {
+  if (!candidate) return "";
+  try {
+    const resolved = new URL(candidate.trim(), baseUrl);
+    if (!/^https?:$/.test(resolved.protocol)) return "";
+    if (resolved.protocol === "http:" && /^https:/i.test(baseUrl)) resolved.protocol = "https:";
+    return resolved.href;
+  } catch {
+    return "";
+  }
+}
+
+function bestSrcsetCandidate(value = "") {
+  const entries = value
+    .split(",")
+    .map((entry) => entry.trim().split(/\s+/))
+    .filter(([url]) => Boolean(url))
+    .map(([url, descriptor = "1x"]) => ({
+      url,
+      score: Number.parseFloat(descriptor) || 1,
+    }));
+  return entries.sort((a, b) => b.score - a.score)[0]?.url || "";
+}
+
+function imageCandidate(image, baseUrl) {
+  const candidates = [
+    image.getAttribute("data-src"),
+    image.getAttribute("data-original"),
+    image.getAttribute("data-lazy-src"),
+    image.getAttribute("data-image"),
+    bestSrcsetCandidate(image.getAttribute("data-srcset") || ""),
+    bestSrcsetCandidate(image.getAttribute("srcset") || ""),
+    image.getAttribute("src"),
+  ];
+  return candidates.map((candidate) => resolveArticleImageUrl(candidate || "", baseUrl)).find(Boolean) || "";
+}
+
+function openGraphHeroImage(doc, baseUrl, title) {
+  const metaCandidates = [
+    "meta[property='og:image']",
+    "meta[name='twitter:image']",
+    "meta[name='twitter:image:src']",
+    "meta[itemprop='image']",
+  ];
+  const candidate = metaCandidates
+    .map((selector) => doc.querySelector(selector)?.getAttribute("content"))
+    .find(Boolean);
+  const src = resolveArticleImageUrl(candidate || "", baseUrl);
+  if (!src) return "";
+  return `<figure class="article-hero"><img src="${escapeHtml(src)}" alt="${escapeHtml(title)}" loading="eager" decoding="async" /></figure>`;
+}
+
+function normalizeArticleImages(html, baseUrl, heroFallback = "") {
   const container = document.createElement("div");
   container.innerHTML = html;
   container.querySelectorAll("img").forEach((image) => {
-    const candidate =
-      image.getAttribute("src") ||
-      image.getAttribute("data-src") ||
-      image.getAttribute("data-original") ||
-      image.getAttribute("data-lazy-src") ||
-      image.getAttribute("data-image");
+    const candidate = imageCandidate(image, baseUrl);
 
     if (!candidate) {
       image.remove();
       return;
     }
 
-    try {
-      const resolved = new URL(candidate, baseUrl);
-      if (!/^https?:$/.test(resolved.protocol)) throw new Error("Unsupported image protocol");
-      image.setAttribute("src", resolved.href);
-      image.setAttribute("loading", "lazy");
-      image.setAttribute("decoding", "async");
-      image.removeAttribute("srcset");
-      image.removeAttribute("sizes");
-      image.removeAttribute("data-src");
-      image.removeAttribute("data-original");
-      image.removeAttribute("data-lazy-src");
-      image.removeAttribute("data-image");
-    } catch {
-      image.remove();
-    }
+    image.setAttribute("src", candidate);
+    image.setAttribute("loading", image.closest("figure") ? "eager" : "lazy");
+    image.setAttribute("decoding", "async");
+    image.removeAttribute("srcset");
+    image.removeAttribute("data-srcset");
+    image.removeAttribute("sizes");
+    image.removeAttribute("data-src");
+    image.removeAttribute("data-original");
+    image.removeAttribute("data-lazy-src");
+    image.removeAttribute("data-image");
   });
+  if (!container.querySelector("img") && heroFallback) container.insertAdjacentHTML("afterbegin", heroFallback);
   return container.innerHTML;
 }
 
-function sanitizeArticleHtml(html, baseUrl) {
-  return DOMPurify.sanitize(normalizeArticleImages(html, baseUrl), {
+function sanitizeArticleHtml(html, baseUrl, heroFallback = "") {
+  return DOMPurify.sanitize(normalizeArticleImages(html, baseUrl, heroFallback), {
     USE_PROFILES: { html: true },
     ADD_TAGS: ["figure", "figcaption", "picture", "source"],
     ADD_ATTR: ["src", "alt", "title", "width", "height", "loading", "decoding"],
@@ -188,7 +244,7 @@ function applySettings() {
   const root = document.documentElement;
   root.dataset.theme = state.settings.theme;
   root.dataset.font = state.settings.font;
-  root.dataset.size = state.settings.size;
+  root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
   root.classList.toggle("dark", state.settings.theme === "dark");
 }
 
@@ -229,7 +285,8 @@ async function extractArticle(url) {
   const parsed = new Readability(doc, { keepClasses: false, charThreshold: 140 }).parse();
   if (!parsed?.content || !parsed?.title) throw new Error("Readability could not identify a full article in this page.");
 
-  const content = sanitizeArticleHtml(parsed.content, url);
+  const heroFallback = openGraphHeroImage(doc, url, parsed.title.trim());
+  const content = sanitizeArticleHtml(parsed.content, url, heroFallback);
   const text = stripHtml(content);
   if (text.length < 120) throw new Error("The extracted text was too short to save as an article.");
 
@@ -252,6 +309,8 @@ async function extractArticle(url) {
     readingMinutes: minutesFor(text),
     dateAdded: new Date().toISOString(),
   };
+  const imageCount = new DOMParser().parseFromString(content, "text/html").images.length;
+  log("extract.images.prepared", `${imageCount} image${imageCount === 1 ? "" : "s"} ready`);
   log("extract.parse.success", `${article.readingMinutes} min · ${text.length.toLocaleString()} chars`);
   return article;
 }
@@ -394,7 +453,7 @@ function readerMarkup() {
         <button class="toolbar-button" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 18)}</button>
       </div>
     </header>
-    <article class="article-reading" data-font="${state.settings.font}" data-size="${state.settings.size}">
+    <article class="article-reading" data-font="${state.settings.font}">
       <p class="article-reading__source">${escapeHtml(article.source)}</p>
       <h1>${escapeHtml(article.title)}</h1>
       <div class="article-reading__meta"><span>${escapeHtml(article.byline)}</span><i></i><span>${article.readingMinutes} min read</span><i></i><span>${formatDate(article.dateAdded)}</span></div>
@@ -406,11 +465,7 @@ function readerMarkup() {
 }
 
 function fontOptionsMarkup() {
-  const active = FONTS.find((font) => font.id === state.settings.font) || FONTS[0];
-  const visible = [active, FONTS[1], FONTS[4]].filter(
-    (font, index, fonts) => fonts.findIndex((candidate) => candidate.id === font.id) === index,
-  );
-  return visible
+  return FONTS
     .map(
       (font) => `<button class="setting-choice font-choice ${state.settings.font === font.id ? "is-active" : ""}" data-action="set-font" data-font="${font.id}" style="--choice-font:${font.family}"><span>Aa</span><small>${font.label}</small></button>`,
     )
@@ -419,17 +474,12 @@ function fontOptionsMarkup() {
 
 function settingsMarkup() {
   if (!state.settingsOpen) return "";
-  const sizeOptions = [
-    ["small", "Small"],
-    ["normal", "Normal"],
-    ["large", "Large"],
-  ];
   return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div>
   <section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="sheet-handle"></div>
     <header class="sheet-header"><div><p class="eyebrow">Reading preferences</p><h2 id="settings-title">Set the page your way.</h2></div><button class="tiny-button" data-action="close-settings">Done</button></header>
-    <div class="settings-section"><p class="setting-label">Typeface</p><div class="choice-grid choice-grid--fonts">${fontOptionsMarkup()}</div><p class="setting-hint">Tap the active option to cycle through Lora and Source Serif.</p></div>
-    <div class="settings-section"><p class="setting-label">Size</p><div class="choice-grid">${sizeOptions.map(([id, label]) => `<button class="setting-choice ${state.settings.size === id ? "is-active" : ""}" data-action="set-size" data-size="${id}">${label}</button>`).join("")}</div></div>
+    <div class="settings-section"><p class="setting-label">Typeface</p><div class="choice-grid choice-grid--fonts">${fontOptionsMarkup()}</div><p class="setting-hint">Choose a typeface directly. Your choice is saved for every article.</p></div>
+    <div class="settings-section"><div class="setting-label-row"><p class="setting-label">Size</p><span>${state.settings.fontSize}px</span></div><div class="type-scale-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" aria-label="Decrease reading size" ${state.settings.fontSize <= 14 ? "disabled" : ""}>A−</button><p>Adjust reading size</p><button class="type-scale-button" data-action="change-size" data-delta="1" aria-label="Increase reading size" ${state.settings.fontSize >= 22 ? "disabled" : ""}>A+</button></div></div>
     <div class="settings-section"><p class="setting-label">Theme</p><div class="choice-grid choice-grid--two"><button class="setting-choice theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 16)}<span>Light</span></button><button class="setting-choice theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 16)}<span>Dark</span></button></div></div>
   </section>`;
 }
@@ -545,18 +595,13 @@ async function handleAction(target) {
     return;
   }
   if (action === "set-font") {
-    const selected = target.dataset.font;
-    if (selected === state.settings.font) {
-      const current = FONTS.findIndex((font) => font.id === selected);
-      state.settings.font = FONTS[(current + 1) % FONTS.length].id;
-    } else {
-      state.settings.font = selected;
-    }
+    state.settings.font = target.dataset.font;
     await persistSettings();
     return;
   }
-  if (action === "set-size") {
-    state.settings.size = target.dataset.size;
+  if (action === "change-size") {
+    const delta = Number(target.dataset.delta);
+    state.settings.fontSize = Math.min(22, Math.max(14, state.settings.fontSize + delta));
     await persistSettings();
     return;
   }
@@ -612,6 +657,17 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener(
+  "load",
+  (event) => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.loaded) return;
+    image.dataset.loaded = "true";
+    log("article.image.loaded", safeUrlForLog(image.currentSrc || image.src));
+  },
+  true,
+);
+
+document.addEventListener(
   "error",
   (event) => {
     const image = event.target;
@@ -632,7 +688,7 @@ async function init() {
     storage.get(KEYS.settings, DEFAULT_SETTINGS),
     storage.get(KEYS.logs, []),
   ]);
-  state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
+  state.settings = normalizeSettings(state.settings);
   state.articles = Array.isArray(state.articles)
     ? state.articles.slice(0, LIMITS.articles).map((article) => ({
         ...article,
