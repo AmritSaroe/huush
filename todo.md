@@ -64,7 +64,7 @@
 - [x] Remove the non-functional day label from the library header.
 - [x] Add an accessible left-swipe gesture that reveals deletion for each saved article.
 - [x] Provide an undo path after an article is deleted to prevent accidental data loss.
-- [ ] Build and provide an Android APK with the refined library gesture.
+- [x] Build and provide an Android APK with the refined library gesture.
 
 ## Logo concept approval
 
