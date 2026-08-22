@@ -50,8 +50,8 @@ a { color: inherit; }
 .screen { width: min(100%, 680px); min-height: 100vh; margin: 0 auto; padding: 28px 20px 102px; animation: screen-enter .28s var(--ease-out) both; }
 .app-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 44px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
-.brand__mark { width: 30px; height: 30px; object-fit: contain; }
-[data-theme="dark"] .brand__mark, [data-theme="dark"] .empty-state__mark, [data-theme="dark"] .debug-intro__mark { filter: invert(1); }
+.brand__mark { display: grid; width: 30px; height: 30px; place-items: center; color: var(--ink); }
+.brand__mark svg { width: 100%; height: 100%; }
 .brand__name { font-size: 19px; font-weight: 500; letter-spacing: -.05em; }
 .brand--compact .brand__mark { width: 23px; height: 23px; }
 .app-header__aside { display: inline-flex; align-items: center; gap: 7px; color: var(--text-tertiary); font-family: var(--font-mono); font-size: 10px; letter-spacing: -.03em; white-space: nowrap; }
@@ -88,14 +88,16 @@ a { color: inherit; }
 .article-item__arrow { color: var(--text-tertiary); }
 .empty-state { display: grid; justify-items: start; max-width: 370px; padding: 47px 0 40px 2px; }
 .empty-state__index { display: flex; width: 100%; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--line); color: var(--text-tertiary); font-family: var(--font-mono); font-size: 9px; font-weight: 500; letter-spacing: -.04em; }
-.empty-state__mark { width: 60px; height: 60px; margin: 34px 0 28px; object-fit: contain; opacity: 1; }
+.empty-state__mark { display: grid; width: 60px; height: 60px; margin: 34px 0 28px; place-items: center; color: var(--ink); }
+.empty-state__mark svg { width: 100%; height: 100%; }
 .empty-state h2 { margin: 0 0 9px; font-size: 20px; font-weight: 500; letter-spacing: -.045em; }
 .empty-state p:last-child { max-width: 340px; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.65; }
 
 .tiny-button { padding: 7px 0; border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
 .tiny-button:not(:disabled):hover { color: var(--ink); }
 .debug-intro { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 18px; align-items: start; max-width: 470px; margin: 42px 0 32px; }
-.debug-intro__mark { width: 47px; height: 47px; object-fit: contain; }
+.debug-intro__mark { display: grid; width: 47px; height: 47px; place-items: center; color: var(--ink); }
+.debug-intro__mark svg { width: 100%; height: 100%; }
 .debug-intro h1 { margin: 0 0 9px; font-size: 24px; font-weight: 500; letter-spacing: -.045em; line-height: 1.1; }
 .debug-intro p:last-child { max-width: 400px; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
 .diagnostic-card { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -129,7 +131,11 @@ a { color: inherit; }
 .article-reading__body h2 { margin: 34px 0 12px; font-family: var(--font-ui); font-size: 19px; font-weight: 500; letter-spacing: -.025em; line-height: 1.3; }
 .article-reading__body h3 { margin: 26px 0 10px; font-family: var(--font-ui); font-size: 16px; font-weight: 500; line-height: 1.35; }
 .article-reading__body blockquote { margin: 26px 0; padding: 1px 0 1px 16px; border-left: 2px solid var(--text-faint); color: var(--text-secondary); font-style: italic; }
-.article-reading__body img { display: none; }
+.article-reading__body figure { margin: 30px 0; }
+.article-reading__body img { display: block; width: 100%; height: auto; max-height: 72vh; border: 1px solid var(--line); background: var(--surface); object-fit: cover; }
+.article-reading__body figure img { margin: 0; }
+.article-reading__body figcaption { margin-top: 8px; color: var(--text-tertiary); font-family: var(--font-ui); font-size: 11px; line-height: 1.5; }
+.article-image-fallback { display: block; margin: 24px 0; padding: 12px 14px; border: 1px solid var(--line); color: var(--text-tertiary); font-family: var(--font-mono); font-size: 10px; line-height: 1.5; }
 .article-reading__body a { text-decoration-color: var(--text-faint); text-underline-offset: 3px; }
 .article-reading__body pre, .article-reading__body code { overflow: auto; font-family: var(--font-mono); font-size: .85em; }
 .article-reading[data-font="merriweather"] .article-reading__body { font-family: var(--font-serif); }

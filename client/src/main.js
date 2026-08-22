@@ -16,12 +16,6 @@ const KEYS = {
 
 const LIMITS = { articles: 50, logs: 160 };
 
-const ASSETS = {
-  logo: "/manus-storage/whitemint-open-page-mark_c5c7f3cd.png",
-  archive: "/manus-storage/whitemint-empty-archive-mark_c452b503.png",
-  diagnostics: "/manus-storage/whitemint-diagnostic-mark_4c5883b6.png",
-};
-
 const DEFAULT_SETTINGS = { theme: "light", font: "sans", size: "normal" };
 
 const FONTS = [
@@ -131,6 +125,51 @@ function minutesFor(text) {
   return Math.max(1, Math.ceil(text.trim().split(/\s+/).filter(Boolean).length / 225));
 }
 
+function normalizeArticleImages(html, baseUrl) {
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  container.querySelectorAll("img").forEach((image) => {
+    const candidate =
+      image.getAttribute("src") ||
+      image.getAttribute("data-src") ||
+      image.getAttribute("data-original") ||
+      image.getAttribute("data-lazy-src") ||
+      image.getAttribute("data-image");
+
+    if (!candidate) {
+      image.remove();
+      return;
+    }
+
+    try {
+      const resolved = new URL(candidate, baseUrl);
+      if (!/^https?:$/.test(resolved.protocol)) throw new Error("Unsupported image protocol");
+      image.setAttribute("src", resolved.href);
+      image.setAttribute("loading", "lazy");
+      image.setAttribute("decoding", "async");
+      image.removeAttribute("srcset");
+      image.removeAttribute("sizes");
+      image.removeAttribute("data-src");
+      image.removeAttribute("data-original");
+      image.removeAttribute("data-lazy-src");
+      image.removeAttribute("data-image");
+    } catch {
+      image.remove();
+    }
+  });
+  return container.innerHTML;
+}
+
+function sanitizeArticleHtml(html, baseUrl) {
+  return DOMPurify.sanitize(normalizeArticleImages(html, baseUrl), {
+    USE_PROFILES: { html: true },
+    ADD_TAGS: ["figure", "figcaption", "picture", "source"],
+    ADD_ATTR: ["src", "alt", "title", "width", "height", "loading", "decoding"],
+    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "button", "svg"],
+    FORBID_ATTR: ["style"],
+  });
+}
+
 function uniqueId() {
   return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -190,11 +229,7 @@ async function extractArticle(url) {
   const parsed = new Readability(doc, { keepClasses: false, charThreshold: 140 }).parse();
   if (!parsed?.content || !parsed?.title) throw new Error("Readability could not identify a full article in this page.");
 
-  const content = DOMPurify.sanitize(parsed.content, {
-    USE_PROFILES: { html: true },
-    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "button", "svg"],
-    FORBID_ATTR: ["style"],
-  });
+  const content = sanitizeArticleHtml(parsed.content, url);
   const text = stripHtml(content);
   if (text.length < 120) throw new Error("The extracted text was too short to save as an article.");
 
@@ -231,6 +266,8 @@ function icon(name, size = 18) {
     copy: "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"1\"/><path d=\"M5 15V5a1 1 0 0 1 1-1h10\"/>",
     book: "<path d=\"M4.5 5.5A2.5 2.5 0 0 1 7 3h4v16H7a2.5 2.5 0 0 0-2.5 2V5.5ZM19.5 5.5A2.5 2.5 0 0 0 17 3h-4v16h4a2.5 2.5 0 0 1 2.5 2V5.5Z\"/>",
     terminal: "<path d=\"m5 7 4 5-4 5M12 17h7\"/>",
+    mark: "<path d=\"M4 4.5h6.15A3.85 3.85 0 0 1 14 8.35V20H7.85A3.85 3.85 0 0 0 4 23V4.5Z\"/><path d=\"M20 4.5h-6.15A3.85 3.85 0 0 0 10 8.35V20h6.15A3.85 3.85 0 0 1 20 23V4.5Z\"/>",
+    diagnostic: "<path d=\"M6 5h12M6 12h8M6 19h12\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"1\"/><circle cx=\"16\" cy=\"12\" r=\"1\" fill=\"currentColor\" stroke=\"none\"/>",
     sun: "<circle cx=\"12\" cy=\"12\" r=\"3.25\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/>",
     moon: "<path d=\"M20.6 14.4A8.8 8.8 0 0 1 9.6 3.4 8.8 8.8 0 1 0 20.6 14.4Z\"/>",
     chevron: "<path d=\"m9 18 6-6-6-6\"/>",
@@ -241,7 +278,7 @@ function icon(name, size = 18) {
 
 function logoMarkup(compact = false) {
   return `<div class="brand ${compact ? "brand--compact" : ""}" aria-label="whitemint reader">
-    <img class="brand__mark" src="${ASSETS.logo}" alt="" />
+    <span class="brand__mark" aria-hidden="true">${icon("mark", 30)}</span>
     ${compact ? "" : "<span class=\"brand__name\">whitemint</span>"}
   </div>`;
 }
@@ -256,7 +293,7 @@ function tabMarkup() {
 function emptyLibraryMarkup() {
   return `<section class="empty-state" aria-labelledby="empty-title">
     <div class="empty-state__index"><span>Index / 00</span><span>Archive capacity 50</span></div>
-    <img class="empty-state__mark" src="${ASSETS.logo}" alt="" />
+    <span class="empty-state__mark" aria-hidden="true">${icon("mark", 60)}</span>
     <p class="eyebrow">Your reading shelf</p>
     <h2 id="empty-title">Nothing saved yet.</h2>
     <p>Paste a direct article link above. whitemint will keep only the words worth returning to.</p>
@@ -315,7 +352,7 @@ function debugMarkup() {
     </header>
     ${tabMarkup()}
     <section class="debug-intro">
-      <img class="debug-intro__mark" src="${ASSETS.diagnostics}" alt="" />
+      <span class="debug-intro__mark" aria-hidden="true">${icon("diagnostic", 47)}</span>
       <div>
         <p class="eyebrow">Diagnostic export</p>
         <h1>Keep the signal clear.</h1>
@@ -574,6 +611,21 @@ document.addEventListener("click", (event) => {
   if (target) void handleAction(target);
 });
 
+document.addEventListener(
+  "error",
+  (event) => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.failed) return;
+    image.dataset.failed = "true";
+    const fallback = document.createElement("span");
+    fallback.className = "article-image-fallback";
+    fallback.textContent = image.alt ? `Image unavailable — ${image.alt}` : "Image unavailable";
+    image.replaceWith(fallback);
+    log("article.image.failed", safeUrlForLog(image.currentSrc || image.src));
+  },
+  true,
+);
+
 async function init() {
   [state.articles, state.settings, state.logs] = await Promise.all([
     storage.get(KEYS.articles, []),
@@ -581,7 +633,12 @@ async function init() {
     storage.get(KEYS.logs, []),
   ]);
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
-  state.articles = Array.isArray(state.articles) ? state.articles.slice(0, LIMITS.articles) : [];
+  state.articles = Array.isArray(state.articles)
+    ? state.articles.slice(0, LIMITS.articles).map((article) => ({
+        ...article,
+        content: sanitizeArticleHtml(article.content || "", article.url || ""),
+      }))
+    : [];
   state.logs = Array.isArray(state.logs) ? state.logs.slice(0, LIMITS.logs) : [];
   log("app.ready", `${Capacitor.getPlatform()} · ${Capacitor.isNativePlatform() ? "native HTTP ready" : "web preview"}`);
   render();
