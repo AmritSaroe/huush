@@ -58,3 +58,20 @@
 - [x] Simplify the library header and saved-reading hierarchy so articles take visual priority.
 - [x] Preserve native extraction, diagnostics, themes, focus mode, and Android back behavior through the new capture flow.
 - [x] Build and provide a streamlined Android APK for testing.
+
+## Swipe-delete library refinement
+
+- [x] Remove the non-functional day label from the library header.
+- [x] Add an accessible left-swipe gesture that reveals deletion for each saved article.
+- [x] Provide an undo path after an article is deleted to prevent accidental data loss.
+- [ ] Build and provide an Android APK with the refined library gesture.
+
+## Logo concept approval
+
+- [x] Generate a modern, scalable whitemint symbol that fits the editorial reader design system.
+- [ ] Present the logo concept for approval before replacing any in-app branding.
+- [ ] Provide the concept as a directly viewable PNG rather than an unusable binary preview link.
+
+## External logo-design brief
+
+- [x] Prepare a detailed description of whitemint for use in an external logo-generation workflow.

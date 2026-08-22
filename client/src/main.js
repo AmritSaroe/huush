@@ -32,8 +32,11 @@ const state = {
   logs: [],
   busy: false,
   toast: null,
+  pendingDelete: null,
   loggedImageUrls: new Set(),
 };
+
+const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
 
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
@@ -223,8 +226,8 @@ function setFocusMode(next) {
   if (announce) announce.textContent = next ? "Focus mode on. Tap the article again to show controls." : "Reader controls shown.";
 }
 
-function showToast(message, type = "neutral") {
-  state.toast = { message, type };
+function showToast(message, type = "neutral", action = "") {
+  state.toast = { message, type, action };
   render();
   window.clearTimeout(showToast.timeout);
   showToast.timeout = window.setTimeout(() => {
@@ -292,6 +295,7 @@ function icon(name, size = 20) {
     external: "<path d=\"M14 5h5v5M19 5l-8 8\"/><path d=\"M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4\"/>",
     sun: "<circle cx=\"12\" cy=\"12\" r=\"3.25\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/>",
     moon: "<path d=\"M20.6 14.4A8.8 8.8 0 0 1 9.6 3.4 8.8 8.8 0 1 0 20.6 14.4Z\"/>",
+    trash: "<path d=\"M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3\"/>",
   };
   return `<svg ${attrs}>${paths[name] || ""}</svg>`;
 }
@@ -328,13 +332,13 @@ function articleListMarkup() {
   }
   return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>Saved articles</p><h2>Worth a return.</h2></div></div><div class="article-card-list">${state.articles.map((article) => {
     const preview = articlePreviewImage(article);
-    return `<button class="article-card" data-action="open-article" data-id="${article.id}">${preview ? `<img class="article-card__image" src="${escapeHtml(preview)}" alt="" loading="lazy" />` : `<span class="article-card__image article-card__image--empty">${icon("book", 34)}</span>`}<span class="article-card__copy"><span class="article-card__source"><b>${escapeHtml(sourceInitials(article.source))}</b>${escapeHtml(article.source)}</span><strong>${escapeHtml(article.title)}</strong><small>${article.readingMinutes} min read · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button>`;
+    return `<div class="swipe-card" data-swipe-card data-id="${article.id}"><button class="swipe-card__delete" data-action="delete-article" data-id="${article.id}" aria-label="Delete ${escapeHtml(article.title)}">${icon("trash", 20)}<span>Delete</span></button><button class="article-card" data-action="open-article" data-id="${article.id}">${preview ? `<img class="article-card__image" src="${escapeHtml(preview)}" alt="" loading="lazy" />` : `<span class="article-card__image article-card__image--empty">${icon("book", 34)}</span>`}<span class="article-card__copy"><span class="article-card__source"><b>${escapeHtml(sourceInitials(article.source))}</b>${escapeHtml(article.source)}</span><strong>${escapeHtml(article.title)}</strong><small>${article.readingMinutes} min read · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button></div>`;
   }).join("")}</div></section>`;
 }
 
 function libraryMarkup() {
   return `<main class="dashboard-screen editorial-library">
-    <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">whitemint</span><span class="editorial-topbar__title">${currentDayLabel()}</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
+    <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">whitemint</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
     <section class="daily-brief daily-brief--clean"><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
     ${articleListMarkup()}
   </main>${bottomNavigationMarkup()}${captureMarkup()}`;
@@ -368,7 +372,7 @@ function settingsMarkup() {
 
 function toastMarkup() {
   if (!state.toast) return "";
-  return `<div class="toast toast--${state.toast.type}" role="status"><span>${state.toast.type === "error" ? "!" : "✓"}</span><p>${escapeHtml(state.toast.message)}</p><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>`;
+  return `<div class="toast toast--${state.toast.type}" role="status"><span>${state.toast.type === "error" ? "!" : "✓"}</span><p>${escapeHtml(state.toast.message)}</p>${state.toast.action ? `<button class="toast__action" data-action="${state.toast.action}">Undo</button>` : ""}<button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>`;
 }
 
 function render() {
@@ -410,6 +414,41 @@ async function handleExtract(form) {
     state.busy = false;
     render();
   }
+}
+
+async function deleteArticle(id) {
+  const index = state.articles.findIndex((article) => article.id === id);
+  if (index < 0) return;
+  const [article] = state.articles.splice(index, 1);
+  state.pendingDelete = { article, index };
+  await storage.set(KEYS.articles, state.articles);
+  log("article.deleted", article.title.slice(0, 80));
+  showToast("Article removed.", "neutral", "undo-delete");
+}
+
+async function undoDelete() {
+  if (!state.pendingDelete) return;
+  const { article, index } = state.pendingDelete;
+  state.articles.splice(Math.min(index, state.articles.length), 0, article);
+  state.pendingDelete = null;
+  await storage.set(KEYS.articles, state.articles);
+  log("article.restored", article.title.slice(0, 80));
+  showToast("Article restored.", "success");
+}
+
+function closeOpenSwipes(except = null) {
+  document.querySelectorAll("[data-swipe-card].is-revealed").forEach((card) => {
+    if (card !== except) card.classList.remove("is-revealed");
+  });
+}
+
+function resetSwipeGesture() {
+  if (!swipeGesture.card) return;
+  swipeGesture.card.classList.remove("is-tracking");
+  swipeGesture.card.style.removeProperty("--swipe-x");
+  swipeGesture.card = null;
+  swipeGesture.deltaX = 0;
+  swipeGesture.active = false;
 }
 
 function buildLogExport() {
@@ -498,6 +537,14 @@ async function handleAction(target) {
     render();
     return;
   }
+  if (action === "delete-article") {
+    await deleteArticle(target.dataset.id);
+    return;
+  }
+  if (action === "undo-delete") {
+    await undoDelete();
+    return;
+  }
   if (action === "back-library") return navigateBack();
   if (action === "open-settings") {
     state.focusMode = false;
@@ -575,8 +622,50 @@ document.addEventListener("scroll", (event) => {
   if (event.target instanceof Element && event.target.matches(".reader-scroll-surface")) state.articleScrollTop = event.target.scrollTop;
 }, true);
 
+document.addEventListener("pointerdown", (event) => {
+  const card = event.target.closest("[data-swipe-card]");
+  if (!card || event.pointerType === "mouse" && event.button !== 0) return;
+  closeOpenSwipes(card);
+  swipeGesture.card = card;
+  swipeGesture.startX = event.clientX;
+  swipeGesture.deltaX = 0;
+  swipeGesture.active = false;
+});
+
+document.addEventListener("pointermove", (event) => {
+  if (!swipeGesture.card) return;
+  const delta = event.clientX - swipeGesture.startX;
+  if (delta >= -10) return;
+  swipeGesture.active = true;
+  swipeGesture.deltaX = Math.max(-124, delta);
+  swipeGesture.card.classList.add("is-tracking");
+  swipeGesture.card.style.setProperty("--swipe-x", `${swipeGesture.deltaX}px`);
+});
+
+document.addEventListener("pointerup", () => {
+  if (!swipeGesture.card) return;
+  const card = swipeGesture.card;
+  const id = card.dataset.id;
+  const shouldDelete = swipeGesture.deltaX <= -104;
+  const shouldReveal = swipeGesture.deltaX <= -38;
+  swipeGesture.suppressClick = swipeGesture.active;
+  resetSwipeGesture();
+  if (shouldDelete) {
+    void deleteArticle(id);
+    return;
+  }
+  if (shouldReveal) card.classList.add("is-revealed");
+});
+
+document.addEventListener("pointercancel", resetSwipeGesture);
+
 document.addEventListener("click", (event) => {
   const actionTarget = event.target.closest("[data-action]");
+  if (swipeGesture.suppressClick && actionTarget?.matches(".article-card")) {
+    event.preventDefault();
+    swipeGesture.suppressClick = false;
+    return;
+  }
   if (actionTarget) {
     void handleAction(actionTarget);
     return;
