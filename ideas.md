@@ -1,60 +1,60 @@
-# whitemint redesign — ground-truth reference
+# whitemint editorial redesign — ground-truth reference
 
-The supplied reference is the visual target for the next release. **whitemint must adopt its native-app character without copying its brand, copy, data, or finance-product features.** The result is a warm, reader-first archive with similar clarity, rounded card rhythm, tactile controls, and calm use of one luminous accent.
+The supplied reading-app references are the visual target. **whitemint should borrow their high-legibility editorial rhythm, not their name, logos, feed content, or premium-product claims.** The app remains a private article archive: users save their own links, read cleaned articles, and export diagnostics.
 
-## Chosen direction — Mint Companion
+## Chosen direction — Editorial Signal
 
 ### Design movement
 
-Native mobile product design with **friendly utility cards**: softly rounded surfaces, roomy gutters, inky navy typography, a warm white canvas, and one optimistic green accent. The composition should feel like an intentional phone application rather than an adapted web page.
+**Editorial Signal** combines a newspaper-like hierarchy with the friendliness of a daily reading companion. It favors substantial type, abundant breathing room, small source markers, real article imagery, and a pale paper canvas punctuated by a highlighter-lime accent.
 
 ### Core principles
 
-1. **A useful welcome.** The library opens with a compact activity snapshot and a prominent save card, so the archive feels alive without inventing social proof or editorial content.
-2. **One high-value accent.** A lime-mint progress card expresses the current library state; the rest of the interface remains paper-white, navy, and soft gray.
-3. **Touchable hierarchy.** Rounded cards, round icon buttons, and a fixed bottom bar make every principal action easy to discover with one hand.
-4. **Focus by subtraction.** In an article, tapping the reading field enters focus mode: the header and navigation disappear, while a second tap restores them.
+1. **Large type is the interface.** Headers, feed titles, controls, and article body text are comfortably sized so the app feels calm at an arm’s length.
+2. **Reading looks curated, never fabricated.** Saved articles become feature cards using their own extracted title, source, reading time, and image; the product never invents summaries, recommendations, or ratings.
+3. **The accent marks value.** Lime highlight bars emphasize a concrete app message or state, while article content and metadata remain neutral and readable.
+4. **Light and dark are equals.** Both themes are designed as complete systems, not color inversion; each preserves comfortable contrast, legible imagery, and visual hierarchy.
 
 ### Color philosophy
 
-Warm white acts as the reading paper. **Whitemint green `#B9E77A`** is the signature color and appears only on the library-status card and small active moments. Deep navy `#0D0B2B` anchors icons, copy, and the navigation system. Shadows are blue-gray and deliberately diffuse rather than heavy.
+Light mode uses **paper `#F6F5F1`**, ink `#101014`, and a lime highlighter **`#C6FA55`**. Dark mode uses graphite `#111113`, warm text `#F3F1EB`, a muted highlighter `#B2DD48`, and lifted charcoal cards. A soft periwinkle reader header is reserved for the article’s opening scene in light mode, while dark mode uses deep plum-black to keep the reader grounded.
 
 ### Layout paradigm
 
-The library is a **stack of inhabitable cards** above a fixed bottom navigation: a top utility row, one bright archive-progress card, one large save-link card, then saved readings. The reader is an immersive vertical page with a compact top bar that can fully disappear in focus mode.
+The library opens as a **daily reading brief**: a date-level heading, a short app-specific archive note, then a vertically paced feed of saved-article cards. Each card gives image, source, title, and reading time room to breathe. The reader begins with a large editorial title block, source identity, metadata, and—when present—the extracted hero image before the body.
 
 ### Signature elements
 
-1. A rounded **open-page glyph** contained in a soft square tile.
-2. A **mint archive-progress card** with a circular count indicator.
-3. A five-position **bottom navigation** where only Reader and Debug are active destinations; other positions are intentionally absent rather than fake features.
+1. **Lime highlighter spans** behind selected interface phrases such as “worth keeping”.
+2. **Source chips** with the first two letters of a source domain, generated locally from article metadata.
+3. A **lavender opening field** for reader titles in light mode, paired with a darker grounded field in dark mode.
 
 ### Interaction philosophy
 
-Reader and Debug navigation are explicit, while Android back and edge gestures return from settings, focus mode, or an open article in that order. Preference controls update the in-place reader without reconstructing the screen. Center taps on reading content toggle focus without interfering with links, images, selections, or form controls.
+The bottom navigation remains low profile. A persistent theme control is available from the library header and reading preferences. In a reader, a center tap toggles focus mode; a second tap restores controls. Preferences update in place, retaining scroll location with no visible screen reconstruction.
 
 ### Animation
 
-Use short 160–220ms opacity and transform transitions only. Opening a card lifts its shadow slightly. Focus mode fades the toolbar and bottom navigation instead of triggering a page transition. Font, size, and theme changes must be instantaneous with no reader remount or scroll reset.
+Content changes should be immediate or use only a 160ms fade/translate. Theme transitions use a short opacity and color transition, while reader focus hides chrome with a light fade. No animation should move the article body or interrupt scrolling.
 
 ### Typography system
 
-**Nunito** provides the friendly UI voice; Inter remains available for a sharper reading option. Merriweather, Source Serif, and JetBrains Mono remain direct reader choices. Library headings use Nunito 600–700, metadata uses Nunito 500, and article text honors the current reading preference.
+**Nunito** leads the app chrome and daily briefing, using 600–700 weights. Article titles use Merriweather at display scale, and the article body continues to honor direct reading-font selection. UI labels start at 13–15px, card titles at 24–30px, reader titles at 38–48px on mobile, and body text defaults to 18px with generous leading.
 
 ### Brand essence
 
-**whitemint is a quiet pocket archive that turns the web’s worthwhile articles into an inviting personal reading habit.**
+**whitemint turns your saved web reading into a calm, large-type daily brief you control.**
 
-Its personality is **warm, capable, and calm**.
+Its personality is **editorial, generous, and intentional**.
 
 ### Brand voice
 
-The voice is supportive and practical. Headings name a clear next state, while action labels use everyday verbs.
+The voice is selective and plainspoken. It describes the reader’s own archive rather than pretending to be a newsroom.
 
-> “Save a good read for later.”
+> “Your reading, delivered with room to think.”
 
-> “Your private shelf is ready when you are.”
+> “A good article is worth keeping.”
 
 ### Wordmark and logo
 
-The open-page mark is retained but placed inside a rounded navy tile. The wordmark remains lowercase **whitemint**, now set in Nunito with a softer, more companionable rhythm.
+The existing open-page mark remains, paired with a lower-case **whitemint** wordmark in Nunito. The mark may appear as a small source-style tile, while the wordmark stays secondary to the saved reading itself.

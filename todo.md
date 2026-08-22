@@ -35,3 +35,18 @@
 - [x] Add a center-tap focus mode that hides reader controls and restores them on the next tap.
 - [x] Implement reliable Android back and edge-navigation handling for reader, settings, focus, and debug states.
 - [x] Build and provide the redesigned Android APK.
+
+## Dark low-chrome redesign
+
+- [ ] Replace the warm dashboard palette with a restrained charcoal-black reader system inspired by the supplied reference.
+- [ ] Rework library hierarchy around large editorial headings, quiet metadata, compact tabs, and low-contrast controls.
+- [ ] Restyle reader focus, preferences, diagnostics, and saved articles to follow the same dark minimal system.
+- [ ] Build and provide a dark-reader Android APK for comparison testing.
+
+## Editorial large-type redesign
+
+- [x] Replace the dark low-chrome direction with a pale editorial feed inspired by the supplied reading references.
+- [x] Increase typographic scale and line-height across the library, article metadata, controls, and reading surface.
+- [x] Add a lime highlighter treatment for selected editorial phrases and active reading states without fabricating editorial summaries.
+- [x] Make light and dark themes visually complete, reachable from the app UI, and persistently stored.
+- [ ] Build and provide a large-type editorial Android APK for testing.

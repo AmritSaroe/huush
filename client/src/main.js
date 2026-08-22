@@ -1,6 +1,6 @@
 /**
- * Mint Companion design reminder: warm-white native surfaces, deep navy controls,
- * one whitemint accent card, and a reader that becomes quieter on demand.
+ * Editorial Signal design reminder: large reading-first typography, pale paper,
+ * restrained lime highlights, and a complete theme system with calm focus mode.
  */
 import "./styles.css";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
@@ -11,7 +11,7 @@ import DOMPurify from "dompurify";
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs" };
 const LIMITS = { articles: 50, logs: 160 };
-const DEFAULT_SETTINGS = { theme: "light", font: "sans", fontSize: 16 };
+const DEFAULT_SETTINGS = { theme: "light", font: "sans", fontSize: 18 };
 const FONTS = [
   { id: "sans", label: "Inter", family: "var(--font-sans)" },
   { id: "nunito", label: "Nunito", family: "var(--font-nunito)" },
@@ -35,13 +35,13 @@ const state = {
 };
 
 function normalizeSettings(saved = {}) {
-  const legacySizes = { small: 15, normal: 16, large: 18 };
+  const legacySizes = { small: 16, normal: 18, large: 21 };
   const preferredSize = Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
   return {
     ...DEFAULT_SETTINGS,
     ...saved,
     font: FONTS.some((font) => font.id === saved.font) ? saved.font : DEFAULT_SETTINGS.font,
-    fontSize: Math.min(22, Math.max(14, Math.round(preferredSize))),
+    fontSize: Math.min(26, Math.max(16, Math.round(preferredSize))),
   };
 }
 
@@ -200,8 +200,8 @@ function syncPreferenceControls() {
   });
   const decrease = document.querySelector("[data-action='change-size'][data-delta='-1']");
   const increase = document.querySelector("[data-action='change-size'][data-delta='1']");
-  if (decrease) decrease.disabled = state.settings.fontSize <= 14;
-  if (increase) increase.disabled = state.settings.fontSize >= 22;
+  if (decrease) decrease.disabled = state.settings.fontSize <= 16;
+  if (increase) increase.disabled = state.settings.fontSize >= 26;
 }
 
 async function persistSettings() {
@@ -299,9 +299,23 @@ function logoMarkup(compact = false) {
   return `<div class="brand ${compact ? "brand--compact" : ""}" aria-label="whitemint reader"><span class="brand__mark" aria-hidden="true">${icon("mark", compact ? 21 : 25)}</span>${compact ? "" : "<span class=\"brand__name\">whitemint</span>"}</div>`;
 }
 
+function articlePreviewImage(article) {
+  const preview = document.createElement("div");
+  preview.innerHTML = article.content || "";
+  return preview.querySelector("img")?.getAttribute("src") || "";
+}
+
+function sourceInitials(source = "") {
+  return source.replace(/^www\./, "").split(/[.\-]/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "WM";
+}
+
+function currentDayLabel() {
+  return new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(new Date());
+}
+
 function bottomNavigationMarkup() {
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
-    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Reader</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Today</span></button>
     <button class="bottom-navigation__add" data-action="scroll-capture" aria-label="Add a reading">${icon("plus", 23)}</button>
     <button class="bottom-navigation__item ${state.activeTab === "debug" ? "is-active" : ""}" data-action="show-debug">${icon("terminal", 21)}<span>Debug</span></button>
   </nav>`;
@@ -309,19 +323,20 @@ function bottomNavigationMarkup() {
 
 function articleListMarkup() {
   if (!state.articles.length) {
-    return `<section class="empty-library"><span class="empty-library__icon">${icon("archive", 30)}</span><div><h2>Your shelf is ready.</h2><p>Save a good article and it will appear here for later.</p></div></section>`;
+    return `<section class="empty-library"><span class="empty-library__icon">${icon("archive", 31)}</span><div><h2>Your brief begins here.</h2><p>Save an article that deserves a little more time.</p></div></section>`;
   }
-  return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>Saved reading</p><h2>On your shelf</h2></div><span>${state.articles.length} saved</span></div><div class="article-card-list">${state.articles.map((article) => `<button class="article-card" data-action="open-article" data-id="${article.id}"><span class="article-card__number">${String(state.articles.indexOf(article) + 1).padStart(2, "0")}</span><span class="article-card__copy"><strong>${escapeHtml(article.title)}</strong><small>${escapeHtml(article.source)} · ${article.readingMinutes} min · ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 17)}</span></button>`).join("")}</div></section>`;
+  return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>Your saved reading</p><h2>Worth a return.</h2></div><span>${state.articles.length} saved</span></div><div class="article-card-list">${state.articles.map((article) => {
+    const preview = articlePreviewImage(article);
+    return `<button class="article-card" data-action="open-article" data-id="${article.id}">${preview ? `<img class="article-card__image" src="${escapeHtml(preview)}" alt="" loading="lazy" />` : `<span class="article-card__image article-card__image--empty">${icon("book", 34)}</span>`}<span class="article-card__copy"><span class="article-card__source"><b>${escapeHtml(sourceInitials(article.source))}</b>${escapeHtml(article.source)}</span><strong>${escapeHtml(article.title)}</strong><small>${article.readingMinutes} min read · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button>`;
+  }).join("")}</div></section>`;
 }
 
 function libraryMarkup() {
-  const savedMinutes = state.articles.reduce((sum, article) => sum + Number(article.readingMinutes || 0), 0);
   const busy = state.busy ? "is-busy" : "";
-  return `<main class="dashboard-screen screen--library">
-    <header class="dashboard-topbar"><button class="profile-tile" aria-label="whitemint library">${icon("mark", 23)}</button>${logoMarkup()}<button class="topbar-action" data-action="show-debug" aria-label="Open debug">${icon("terminal", 20)}</button></header>
-    <section class="welcome-copy"><p>Private reading archive</p><h1>Make room for<br /><em>the good stuff.</em></h1></section>
-    <section class="mint-glance" aria-label="Reading archive summary"><div class="mint-glance__count"><strong>${state.articles.length}</strong><span>of ${LIMITS.articles}</span></div><div><h2>Your shelf is growing</h2><p>${state.articles.length ? `${savedMinutes} minutes of saved reading` : "Save links you want to return to"}</p></div><span class="mint-glance__arrow">${icon("chevron", 20)}</span></section>
-    <section class="save-card" id="save-card" aria-labelledby="save-title"><div class="save-card__heading"><span class="save-card__icon">${icon("plus", 19)}</span><div><p>Add a reading</p><h2 id="save-title">Save a web article</h2></div></div><form class="capture__form" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" placeholder="Paste an article URL" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 20)}</button></form><p class="save-card__note">Cleaned privately on your device with native fetching.</p></section>
+  return `<main class="dashboard-screen editorial-library">
+    <header class="editorial-topbar"><button class="mark-button" aria-label="whitemint library">${icon("mark", 24)}</button><span class="editorial-topbar__title">${currentDayLabel()} ${icon("chevron", 17)}</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
+    <section class="daily-brief"><p>Hello,</p><h1>Your saved reading,<br /><span>delivered with room to think.</span></h1><div class="daily-brief__byline">${icon("mark", 14)}<span>Private to whitemint</span></div></section>
+    <section class="save-card" id="save-card" aria-labelledby="save-title"><div class="save-card__heading"><div><p>Add to your brief</p><h2 id="save-title">Save a web article</h2></div><span class="save-card__icon">${icon("plus", 20)}</span></div><form class="capture__form" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" placeholder="Paste an article URL" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="save-card__note">Cleaned on your device, ready when you are.</p></section>
     ${articleListMarkup()}
   </main>${bottomNavigationMarkup()}`;
 }
@@ -334,7 +349,7 @@ function debugMarkup() {
 function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity">${logoMarkup(true)}<span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><p class="article-reading__source">${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>${escapeHtml(article.byline)}</span><i></i><span>${article.readingMinutes} min read</span><i></i><span>${formatDate(article.dateAdded)}</span></div><div class="article-reading__rule"></div><div class="article-reading__body">${article.content}</div><footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 14)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${article.content}</div><footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -343,7 +358,7 @@ function fontOptionsMarkup() {
 
 function settingsMarkup() {
   if (!state.settingsOpen) return "";
-  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Make it yours.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header><div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-section"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="type-scale-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" aria-label="Decrease reading size" ${state.settings.fontSize <= 14 ? "disabled" : ""}>A−</button><p>Comfortable reading</p><button class="type-scale-button" data-action="change-size" data-delta="1" aria-label="Increase reading size" ${state.settings.fontSize >= 22 ? "disabled" : ""}>A+</button></div></div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button></div></div></section>`;
+  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Set the pace.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header><div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-section"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="type-scale-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" aria-label="Decrease reading size" ${state.settings.fontSize <= 16 ? "disabled" : ""}>A−</button><p>Comfortable reading</p><button class="type-scale-button" data-action="change-size" data-delta="1" aria-label="Increase reading size" ${state.settings.fontSize >= 26 ? "disabled" : ""}>A+</button></div></div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button></div></div></section>`;
 }
 
 function toastMarkup() {
@@ -487,12 +502,17 @@ async function handleAction(target) {
     return;
   }
   if (action === "change-size") {
-    state.settings.fontSize = Math.min(22, Math.max(14, state.settings.fontSize + Number(target.dataset.delta)));
+    state.settings.fontSize = Math.min(26, Math.max(16, state.settings.fontSize + Number(target.dataset.delta)));
     await persistSettings();
     return;
   }
   if (action === "set-theme") {
     state.settings.theme = target.dataset.theme;
+    await persistSettings();
+    return;
+  }
+  if (action === "toggle-theme") {
+    state.settings.theme = state.settings.theme === "light" ? "dark" : "light";
     await persistSettings();
     return;
   }
