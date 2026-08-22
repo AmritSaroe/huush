@@ -49,4 +49,4 @@
 - [x] Increase typographic scale and line-height across the library, article metadata, controls, and reading surface.
 - [x] Add a lime highlighter treatment for selected editorial phrases and active reading states without fabricating editorial summaries.
 - [x] Make light and dark themes visually complete, reachable from the app UI, and persistently stored.
-- [ ] Build and provide a large-type editorial Android APK for testing.
+- [x] Build and provide a large-type editorial Android APK for testing.
