@@ -34,4 +34,4 @@
 - [x] Make preference changes update only the relevant reader state so the screen no longer visibly reloads or blinks.
 - [x] Add a center-tap focus mode that hides reader controls and restores them on the next tap.
 - [x] Implement reliable Android back and edge-navigation handling for reader, settings, focus, and debug states.
-- [ ] Build and provide the redesigned Android APK.
+- [x] Build and provide the redesigned Android APK.
