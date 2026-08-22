@@ -35,6 +35,7 @@ const state = {
   logs: [],
   busy: false,
   toast: null,
+  loggedImageUrls: new Set(),
 };
 
 function normalizeSettings(saved = {}) {
@@ -662,7 +663,10 @@ document.addEventListener(
     const image = event.target;
     if (!(image instanceof HTMLImageElement) || !image.closest(".article-reading__body") || image.dataset.loaded) return;
     image.dataset.loaded = "true";
-    log("article.image.loaded", safeUrlForLog(image.currentSrc || image.src));
+    const source = safeUrlForLog(image.currentSrc || image.src);
+    if (state.loggedImageUrls.has(source)) return;
+    state.loggedImageUrls.add(source);
+    log("article.image.loaded", source);
   },
   true,
 );
