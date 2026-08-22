@@ -3,11 +3,10 @@
  * restrained lime highlights, and a complete theme system with calm focus mode.
  */
 import "./styles.css";
-import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Preferences } from "@capacitor/preferences";
-import { Readability } from "@mozilla/readability";
-import DOMPurify from "dompurify";
+import { extractArticle, sanitizeContent } from "./lib/fetcher.js";
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs" };
 const LIMITS = { articles: 50, logs: 160 };
@@ -119,100 +118,8 @@ function formatClock(value) {
   }
 }
 
-function minutesFor(text) {
-  return Math.max(1, Math.ceil(text.trim().split(/\s+/).filter(Boolean).length / 225));
-}
-
-function resolveArticleImageUrl(candidate, baseUrl) {
-  if (!candidate) return "";
-  try {
-    const resolved = new URL(candidate.trim(), baseUrl);
-    if (!/^https?:$/.test(resolved.protocol)) return "";
-    if (resolved.protocol === "http:" && /^https:/i.test(baseUrl)) resolved.protocol = "https:";
-    return resolved.href;
-  } catch {
-    return "";
-  }
-}
-
-function bestSrcsetCandidate(value = "") {
-  return value
-    .split(",")
-    .map((entry) => entry.trim().split(/\s+/))
-    .filter(([url]) => Boolean(url))
-    .map(([url, descriptor = "1x"]) => ({ url, score: Number.parseFloat(descriptor) || 1 }))
-    .sort((a, b) => b.score - a.score)[0]?.url || "";
-}
-
-function imageCandidate(image, baseUrl) {
-  const candidates = [image.getAttribute("data-src"), image.getAttribute("data-original"), image.getAttribute("data-lazy-src"), image.getAttribute("data-image"), bestSrcsetCandidate(image.getAttribute("data-srcset") || ""), bestSrcsetCandidate(image.getAttribute("srcset") || ""), image.getAttribute("src")];
-  return candidates.map((candidate) => resolveArticleImageUrl(candidate || "", baseUrl)).find(Boolean) || "";
-}
-
-function openGraphHeroImage(doc, baseUrl, title) {
-  const candidate = ["meta[property='og:image']", "meta[name='twitter:image']", "meta[name='twitter:image:src']", "meta[itemprop='image']"].map((selector) => doc.querySelector(selector)?.getAttribute("content")).find(Boolean);
-  const src = resolveArticleImageUrl(candidate || "", baseUrl);
-  return src ? `<figure class="article-hero"><img src="${escapeHtml(src)}" alt="${escapeHtml(title)}" loading="eager" decoding="async" /></figure>` : "";
-}
-
-function normalizeArticleImages(html, baseUrl, heroFallback = "") {
-  const container = document.createElement("div");
-  container.innerHTML = html;
-  container.querySelectorAll("img").forEach((image) => {
-    const candidate = imageCandidate(image, baseUrl);
-    if (!candidate) {
-      image.remove();
-      return;
-    }
-    image.setAttribute("src", candidate);
-    image.setAttribute("loading", image.closest("figure") ? "eager" : "lazy");
-    image.setAttribute("decoding", "async");
-    ["srcset", "data-srcset", "sizes", "data-src", "data-original", "data-lazy-src", "data-image"].forEach((attribute) => image.removeAttribute(attribute));
-  });
-  if (!container.querySelector("img") && heroFallback) container.insertAdjacentHTML("afterbegin", heroFallback);
-  return container.innerHTML;
-}
-
 function sanitizeArticleHtml(html, baseUrl, heroFallback = "") {
-  return DOMPurify.sanitize(normalizeArticleImages(html, baseUrl, heroFallback), {
-    USE_PROFILES: { html: true },
-    ADD_TAGS: ["figure", "figcaption", "picture", "source"],
-    ADD_ATTR: ["src", "alt", "title", "width", "height", "loading", "decoding"],
-    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "button", "svg"],
-    FORBID_ATTR: ["style"],
-  });
-}
-
-function isPublicIntroParagraph(text) {
-  if (text.length < 90 || text.length > 1500) return false;
-  return !/(subscribe|subscription|sign in|register|log in|unlock|premium plan|continue reading|advertisement|cookie policy|privacy policy|related stories|most popular|recommended for you)/i.test(text);
-}
-
-function publicParagraphFallback(doc, currentContent) {
-  const roots = [doc.querySelector("article"), doc.querySelector("main"), doc.body].filter(Boolean);
-  const seen = new Set();
-  const paragraphs = [];
-
-  for (const root of roots) {
-    for (const paragraph of root.querySelectorAll("p")) {
-      if (paragraph.closest("nav, header, footer, aside, form, [role='navigation'], [aria-label*='subscription' i]")) continue;
-      const text = stripHtml(paragraph.innerHTML);
-      if (!isPublicIntroParagraph(text) || seen.has(text)) continue;
-      seen.add(text);
-      paragraphs.push(text);
-      if (paragraphs.length === 5) break;
-    }
-    if (paragraphs.length === 5) break;
-  }
-
-  const currentText = stripHtml(currentContent);
-  const fallbackText = paragraphs.join(" ");
-  if (paragraphs.length < 2 || fallbackText.length <= currentText.length + 120) return null;
-  return { content: paragraphs.map((text) => `<p>${escapeHtml(text)}</p>`).join(""), count: paragraphs.length };
-}
-
-function uniqueId() {
-  return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return sanitizeContent(html, { baseUrl, heroFallback });
 }
 
 function applySettings() {
@@ -268,46 +175,6 @@ async function saveArticle(article) {
   state.articles = [article, ...state.articles.filter((saved) => saved.url !== article.url)].slice(0, LIMITS.articles);
   await storage.set(KEYS.articles, state.articles);
   log("article.saved", { source: article.source, title: article.title.slice(0, 80) });
-}
-
-async function fetchRawHtml(url) {
-  if (Capacitor.isNativePlatform()) {
-    log("fetch.native.start", safeUrlForLog(url));
-    const response = await CapacitorHttp.get({ url, responseType: "text", connectTimeout: 30000, readTimeout: 30000 });
-    if (response.status < 200 || response.status >= 400) throw new Error(`Native request returned HTTP ${response.status}`);
-    return typeof response.data === "string" ? response.data : String(response.data || "");
-  }
-  log("fetch.web.start", `${safeUrlForLog(url)} · browser fallback`);
-  const response = await fetch(url, { headers: { Accept: "text/html,application/xhtml+xml" } });
-  if (!response.ok) throw new Error(`Browser request returned HTTP ${response.status}`);
-  return response.text();
-}
-
-async function extractArticle(url) {
-  const rawHtml = await fetchRawHtml(url);
-  log("extract.parse.start", `${rawHtml.length.toLocaleString()} bytes received`);
-  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
-  const readabilityDoc = doc.cloneNode(true);
-  const parsed = new Readability(readabilityDoc, { keepClasses: false, charThreshold: 140 }).parse();
-  if (!parsed?.content || !parsed?.title) throw new Error("Readability could not identify a full article in this page.");
-  const fallback = publicParagraphFallback(doc, parsed.content);
-  const sourceContent = fallback?.content || parsed.content;
-  const content = sanitizeArticleHtml(sourceContent, url, openGraphHeroImage(doc, url, parsed.title.trim()));
-  const text = stripHtml(content);
-  if (text.length < 120) throw new Error("The extracted text was too short to save as an article.");
-  const source = (() => {
-    try {
-      return new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      return "Saved page";
-    }
-  })();
-  const article = { id: uniqueId(), url, title: parsed.title.trim(), byline: parsed.byline?.trim() || source, source, content, excerpt: parsed.excerpt?.trim() || text.slice(0, 220), readingMinutes: minutesFor(text), dateAdded: new Date().toISOString() };
-  const imageCount = new DOMParser().parseFromString(content, "text/html").images.length;
-  if (fallback) log("extract.public_fallback.used", `${fallback.count} public introductory paragraphs retained`);
-  log("extract.images.prepared", `${imageCount} image${imageCount === 1 ? "" : "s"} ready`);
-  log("extract.parse.success", `${article.readingMinutes} min · ${text.length.toLocaleString()} chars`);
-  return article;
 }
 
 function icon(name, size = 20) {
@@ -390,7 +257,8 @@ function debugMarkup() {
 function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${article.content}</div><footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. Open the source to continue reading.</p><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open in browser ${icon("external", 15)}</a></aside>` : "";
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${previewNotice}${article.content}</div><footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -432,7 +300,7 @@ async function handleExtract(form) {
   state.busy = true;
   render();
   try {
-    const article = await extractArticle(checkedUrl.toString());
+    const article = await extractArticle(checkedUrl.toString(), { log });
     await saveArticle(article);
     state.article = article;
     state.articleScrollTop = 0;
