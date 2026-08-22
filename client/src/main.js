@@ -180,7 +180,14 @@ function showToast(message, type = "neutral", action = "") {
 async function saveArticle(article) {
   state.articles = [article, ...state.articles.filter((saved) => saved.url !== article.url)].slice(0, LIMITS.articles);
   await storage.set(KEYS.articles, state.articles);
-  log("article.saved", { source: article.source, title: article.title.slice(0, 80) });
+  log("article.saved", {
+    source: article.source,
+    title: article.title.slice(0, 80),
+    strategy: article.strategy || "unknown",
+    score: article.score ?? null,
+    characters: article.textContent?.length || stripHtml(article.content || "").length,
+    previewOnly: Boolean(article.previewOnly),
+  });
 }
 
 function icon(name, size = 20) {
