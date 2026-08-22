@@ -11,7 +11,7 @@ import { Readability } from "@mozilla/readability";
  */
 
 const CFG = {
-  MIN_CHARS: 800,
+  MIN_CHARS: 1200,
   MIN_PARAGRAPHS: 3,
   FETCH_TIMEOUT: 15000,
 };
@@ -135,7 +135,7 @@ function heroImage(doc, baseUrl, title) {
 // ─── Embedded JSON extraction ───
 function bodyFromRecord(record) {
   if (!record || typeof record !== "object" || Array.isArray(record)) return "";
-  return [record.htmlContent, record.articleBody, record.body, record.content, record.text]
+  return [record.htmlContent, record.articleBody, record.body, record.content, record.text, record.storyText]
     .find(value => typeof value === "string" && clean(value).length >= 200) || "";
 }
 
@@ -143,7 +143,7 @@ function looksLikeArticleRecord(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const body = bodyFromRecord(value);
   const title = value.headline || value.title || value.pageTitle || value.meta_title || value.story_page_meta_title;
-  return Boolean(body && (title || value.author || value.authorName || value.byline || value.metaDescription || value.metaDescription));
+  return Boolean(body && title);
 }
 
 function findArticleRecord(value, seen = new Set(), depth = 0) {
@@ -175,9 +175,31 @@ function parseJsonScript(script) {
 function parseAssignedObject(text, token) {
   const assignment = text.indexOf(token);
   if (assignment < 0) return null;
+  const afterToken = text.slice(assignment + token.length);
+  const wrapped = afterToken.match(/^\s*=\s*JSON\.parse\(/);
+
+  // Economic Times and some other publishers serialize their state as a
+  // JavaScript string: window.__INITIAL_STATE__ = JSON.parse("{...}").
+  if (wrapped) {
+    const literalStart = assignment + token.length + wrapped[0].length;
+    if (text[literalStart] !== '"') return null;
+    let literalEnd = literalStart + 1;
+    let escaped = false;
+    for (; literalEnd < text.length; literalEnd++) {
+      const character = text[literalEnd];
+      if (escaped) { escaped = false; continue; }
+      if (character === "\\") { escaped = true; continue; }
+      if (character === '"') break;
+    }
+    if (literalEnd >= text.length) return null;
+    try {
+      const decoded = JSON.parse(text.slice(literalStart, literalEnd + 1));
+      return JSON.parse(decoded);
+    } catch { return null; }
+  }
+
   const start = text.indexOf("{", assignment);
   if (start < 0) return null;
-
   let depth = 0;
   let inString = false;
   let escaped = false;
