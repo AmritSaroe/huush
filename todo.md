@@ -4,4 +4,4 @@
 - [x] Retain safe article image elements and source attributes during sanitization.
 - [x] Resolve relative article-image URLs to absolute URLs before article storage.
 - [x] Add responsive reader styles for article images, captions, and failed-image handling.
-- [ ] Rebuild the Capacitor Android APK through GitHub Actions and provide the corrected artifact for testing.
+- [x] Rebuild the Capacitor Android APK through GitHub Actions and provide the corrected artifact for testing.
