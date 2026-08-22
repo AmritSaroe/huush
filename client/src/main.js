@@ -183,6 +183,34 @@ function sanitizeArticleHtml(html, baseUrl, heroFallback = "") {
   });
 }
 
+function isPublicIntroParagraph(text) {
+  if (text.length < 90 || text.length > 1500) return false;
+  return !/(subscribe|subscription|sign in|register|log in|unlock|premium plan|continue reading|advertisement|cookie policy|privacy policy|related stories|most popular|recommended for you)/i.test(text);
+}
+
+function publicParagraphFallback(doc, currentContent) {
+  const roots = [doc.querySelector("article"), doc.querySelector("main"), doc.body].filter(Boolean);
+  const seen = new Set();
+  const paragraphs = [];
+
+  for (const root of roots) {
+    for (const paragraph of root.querySelectorAll("p")) {
+      if (paragraph.closest("nav, header, footer, aside, form, [role='navigation'], [aria-label*='subscription' i]")) continue;
+      const text = stripHtml(paragraph.innerHTML);
+      if (!isPublicIntroParagraph(text) || seen.has(text)) continue;
+      seen.add(text);
+      paragraphs.push(text);
+      if (paragraphs.length === 5) break;
+    }
+    if (paragraphs.length === 5) break;
+  }
+
+  const currentText = stripHtml(currentContent);
+  const fallbackText = paragraphs.join(" ");
+  if (paragraphs.length < 2 || fallbackText.length <= currentText.length + 120) return null;
+  return { content: paragraphs.map((text) => `<p>${escapeHtml(text)}</p>`).join(""), count: paragraphs.length };
+}
+
 function uniqueId() {
   return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -259,9 +287,12 @@ async function extractArticle(url) {
   const rawHtml = await fetchRawHtml(url);
   log("extract.parse.start", `${rawHtml.length.toLocaleString()} bytes received`);
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
-  const parsed = new Readability(doc, { keepClasses: false, charThreshold: 140 }).parse();
+  const readabilityDoc = doc.cloneNode(true);
+  const parsed = new Readability(readabilityDoc, { keepClasses: false, charThreshold: 140 }).parse();
   if (!parsed?.content || !parsed?.title) throw new Error("Readability could not identify a full article in this page.");
-  const content = sanitizeArticleHtml(parsed.content, url, openGraphHeroImage(doc, url, parsed.title.trim()));
+  const fallback = publicParagraphFallback(doc, parsed.content);
+  const sourceContent = fallback?.content || parsed.content;
+  const content = sanitizeArticleHtml(sourceContent, url, openGraphHeroImage(doc, url, parsed.title.trim()));
   const text = stripHtml(content);
   if (text.length < 120) throw new Error("The extracted text was too short to save as an article.");
   const source = (() => {
@@ -273,6 +304,7 @@ async function extractArticle(url) {
   })();
   const article = { id: uniqueId(), url, title: parsed.title.trim(), byline: parsed.byline?.trim() || source, source, content, excerpt: parsed.excerpt?.trim() || text.slice(0, 220), readingMinutes: minutesFor(text), dateAdded: new Date().toISOString() };
   const imageCount = new DOMParser().parseFromString(content, "text/html").images.length;
+  if (fallback) log("extract.public_fallback.used", `${fallback.count} public introductory paragraphs retained`);
   log("extract.images.prepared", `${imageCount} image${imageCount === 1 ? "" : "s"} ready`);
   log("extract.parse.success", `${article.readingMinutes} min · ${text.length.toLocaleString()} chars`);
   return article;

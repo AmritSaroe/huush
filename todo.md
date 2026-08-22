@@ -66,6 +66,23 @@
 - [x] Provide an undo path after an article is deleted to prevent accidental data loss.
 - [x] Build and provide an Android APK with the refined library gesture.
 
+## Premium-article access assessment
+
+- [x] Inspect the supplied Business Standard article and identify what is publicly available.
+- [x] Determine whether Business Standard offers an official authenticated or licensed integration route suitable for whitemint.
+- [x] Document compliant options without bypassing the publisher’s access controls or subscription protections.
+
+## Public page-delivery verification
+
+- [x] Verify the text exposed in the supplied article’s unauthenticated public response.
+- [x] Clarify the finding without adding a mechanism to import protected premium content into whitemint.
+
+## Public-response fallback parser
+
+- [x] Add a generic fallback that renders only readable paragraphs already delivered in the public page response when Readability under-extracts.
+- [x] Exclude subscription prompts, navigation, recommendation modules, and unrelated page chrome from the fallback output.
+- [ ] Build and provide an Android APK with the improved public-content extraction behavior.
+
 ## Logo concept approval
 
 - [x] Generate a modern, scalable whitemint symbol that fits the editorial reader design system.
