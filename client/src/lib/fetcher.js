@@ -1,18 +1,13 @@
-import { Capacitor, CapacitorHttp } from "@capacitor/core";
-import { Readability } from "@mozilla/readability";
-
 /**
  * whitemint — Article Extractor
- * Multi-strategy extraction with quality scoring.
- * Designed for Capacitor (native WebView, no CORS).
+ * Three-strategy extraction with quality scoring.
  *
  * Strategies:
- *   1. Direct fetch + Readability    — fastest, works for static sites
- *   2. Render-then-extract           — iframe + JS execution, catches lazy content
- *   3. Archive.org via Jina Reader  — last-resort recovery for blocked/empty pages
+ *   1. Direct fetch + Readability          — fastest
+ *   2. Direct fetch + deep paragraph scrape — when Readability under-extracts
+ *   3. Render-then-extract                  — iframe, last resort
  */
 
-// ─── Config ───
 const CFG = {
   MIN_CHARS: 800,
   MIN_PARAGRAPHS: 3,
@@ -57,21 +52,12 @@ const SOURCE_MAP = {
 };
 
 const PAYWALL_PHRASES = [
-  "subscribe now",
-  "subscription required",
-  "please log in",
-  "sign in to read",
-  "premium content",
-  "continue reading",
-  "exclusive story",
-  "limited access",
-  "get full access",
-  "sign up to read",
-  "unlock this article",
-  "uh-oh! this is an exclusive",
-  "this is a premium article",
-  "you have reached your limit",
-  "login to get access",
+  "subscribe now", "subscription required", "please log in",
+  "sign in to read", "premium content", "continue reading",
+  "exclusive story", "limited access", "get full access",
+  "sign up to read", "unlock this article",
+  "uh-oh! this is an exclusive", "this is a premium article",
+  "you have reached your limit", "login to get access",
 ];
 
 // ─── Utils ───
@@ -85,9 +71,8 @@ function uid() {
 
 function sourceName(url) {
   try {
-    const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
-    const mappedDomain = Object.keys(SOURCE_MAP).find((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
-    return mappedDomain ? SOURCE_MAP[mappedDomain] : hostname;
+    const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    return SOURCE_MAP[h] || h;
   } catch {
     return "Article";
   }
@@ -106,108 +91,53 @@ function escapeHtml(str = "") {
     .replace(/'/g, "&#039;");
 }
 
-function textFromHtml(html = "") {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  return clean(parsed.body?.textContent || "");
-}
-
-function paragraphCount(html = "") {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  return Array.from(parsed.querySelectorAll("p")).filter((paragraph) => clean(paragraph.textContent || "")).length;
-}
-
-function isLowQuality(article) {
-  if (!article) return true;
-  return article.textContent.length < CFG.MIN_CHARS || paragraphCount(article.content) < CFG.MIN_PARAGRAPHS;
-}
-
 // ─── Quality Score ───
 function score(article) {
   if (!article || !article.textContent) return -Infinity;
   const txt = article.textContent;
   const html = article.content || "";
-  let value = 0;
-
-  value += txt.length * 0.6;
-  value += (html.match(/<p\b/gi) || []).length * 120;
-  value += (html.match(/<h[2-6]\b/gi) || []).length * 60;
-  value += article.title?.length > 15 ? 250 : 0;
-  value += article.byline ? 80 : 0;
-  value += (html.match(/<img\b/gi) || []).length * 30;
-
+  let s = 0;
+  s += txt.length * 0.6;
+  s += (html.match(/<p/gi) || []).length * 120;
+  s += (html.match(/<h[2-6]/gi) || []).length * 60;
+  s += article.title?.length > 15 ? 250 : 0;
+  s += article.byline ? 80 : 0;
   const lower = txt.toLowerCase();
-  PAYWALL_PHRASES.forEach((phrase) => {
-    if (lower.includes(phrase)) value -= 400;
-  });
-
-  return value;
+  PAYWALL_PHRASES.forEach(p => { if (lower.includes(p)) s -= 400; });
+  return s;
 }
 
 // ─── Sanitize ───
-function sanitize(html = "", baseUrl = "", heroFallback = "") {
+function sanitize(html = "", baseUrl = "") {
   const div = document.createElement("div");
   div.innerHTML = html;
-
   div.querySelectorAll(
     "script, style, iframe, object, embed, form, input, button, textarea, select, option, svg, canvas, meta, link, base, noscript, nav, aside"
-  ).forEach((element) => element.remove());
-
-  // Resolve lazy image candidates before removing data-* attributes.
-  div.querySelectorAll("img").forEach((img) => {
-    const candidates = [
-      img.getAttribute("data-src"),
-      img.getAttribute("data-original"),
-      img.getAttribute("data-lazy-src"),
-      img.getAttribute("src"),
-    ];
-    const src = candidates.find(Boolean);
-    if (src) {
-      try {
-        const resolved = new URL(src, baseUrl || document.baseURI).href;
-        if (!/^https?:$/i.test(new URL(resolved).protocol)) throw new Error("Unsupported image protocol");
-        img.setAttribute("src", resolved);
-        img.setAttribute("loading", "lazy");
-        img.setAttribute("decoding", "async");
-      } catch {
-        img.remove();
-      }
-    } else {
-      img.remove();
-    }
-    ["data-src", "data-original", "data-lazy-src", "srcset", "data-srcset", "sizes"].forEach((attribute) => img.removeAttribute(attribute));
-  });
-
-  div.querySelectorAll("*").forEach((element) => {
-    Array.from(element.attributes).forEach((attribute) => {
-      const name = attribute.name.toLowerCase();
-      if (name === "style" || name === "class" || name === "id" || name.startsWith("data-") || name.startsWith("on") || name === "srcdoc") {
-        element.removeAttribute(attribute.name);
+  ).forEach(el => el.remove());
+  div.querySelectorAll("*").forEach(el => {
+    Array.from(el.attributes).forEach(attr => {
+      const n = attr.name.toLowerCase();
+      if (n === "style" || n === "class" || n === "id" || n.startsWith("data-") || n.startsWith("on") || n === "srcdoc") {
+        el.removeAttribute(attr.name);
       }
     });
   });
-
-  div.querySelectorAll("div, span, p").forEach((element) => {
-    if (!element.textContent.trim() && !element.querySelector("img")) element.remove();
+  div.querySelectorAll("img").forEach(img => {
+    const candidates = [img.getAttribute("data-src"), img.getAttribute("data-original"), img.getAttribute("data-lazy-src"), img.getAttribute("src")];
+    const src = candidates.find(Boolean);
+    if (src) {
+      try { img.setAttribute("src", new URL(src, baseUrl).href); img.setAttribute("loading", "lazy"); img.setAttribute("decoding", "async"); }
+      catch { img.remove(); }
+    } else { img.remove(); }
+    ["data-src", "data-original", "data-lazy-src", "srcset", "data-srcset", "sizes"].forEach(a => img.removeAttribute(a));
   });
-
-  if (!div.firstElementChild && heroFallback) div.insertAdjacentHTML("afterbegin", heroFallback);
+  div.querySelectorAll("div, span, p").forEach(el => {
+    if (!el.textContent.trim() && !el.querySelector("img")) el.remove();
+  });
   return div.innerHTML;
 }
 
-/**
- * Compatibility export used by the existing reader's storage hydration path.
- * It accepts both the attached script's `(html, baseUrl)` form and the previous
- * whitemint adapter's `(html, { baseUrl, heroFallback })` form.
- */
-export function sanitizeContent(html = "", baseUrl = "", heroFallback = "") {
-  if (baseUrl && typeof baseUrl === "object") {
-    heroFallback = baseUrl.heroFallback || "";
-    baseUrl = baseUrl.baseUrl || "";
-  }
-  return sanitize(html, baseUrl, heroFallback);
-}
-
-// ─── Title Fix ───
+// ─── Title / Byline / Hero ───
 function fixTitle(doc, readabilityTitle = "") {
   const candidates = [
     doc.querySelector('meta[property="og:title"]')?.content,
@@ -217,181 +147,172 @@ function fixTitle(doc, readabilityTitle = "") {
     doc.querySelector("h1")?.textContent,
     doc.querySelector('[itemprop="headline"]')?.textContent,
     readabilityTitle,
-  ]
-    .filter(Boolean)
-    .map(clean);
-
-  for (const title of candidates) {
-    if (title.length > 10 && title.length < 200) return title;
-  }
+  ].filter(Boolean).map(clean);
+  for (const t of candidates) { if (t.length > 10 && t.length < 200) return t; }
   return candidates[0] || "Untitled";
 }
 
-// ─── Byline Fix ───
 function fixByline(doc, readabilityByline = "") {
-  return clean(readabilityByline) ||
-    clean(doc.querySelector('meta[name="author"]')?.content) ||
-    clean(doc.querySelector('[itemprop="author"]')?.textContent) ||
-    "";
+  return clean(readabilityByline) || clean(doc.querySelector('meta[name="author"]')?.content) || clean(doc.querySelector('[itemprop="author"]')?.textContent) || "";
 }
 
-// ─── Hero Image ───
 function heroImage(doc, baseUrl, title) {
-  const src = [
-    doc.querySelector('meta[property="og:image"]')?.content,
-    doc.querySelector('meta[name="twitter:image"]')?.content,
-    doc.querySelector('meta[itemprop="image"]')?.content,
-  ].find(Boolean);
-
+  const src = [doc.querySelector('meta[property="og:image"]')?.content, doc.querySelector('meta[name="twitter:image"]')?.content, doc.querySelector('meta[itemprop="image"]')?.content].find(Boolean);
   if (!src) return "";
-  try {
-    const url = new URL(src, baseUrl).href;
-    return `<figure><img src="${escapeHtml(url)}" alt="${escapeHtml(title)}" loading="eager" decoding="async"></figure>`;
-  } catch {
-    return "";
-  }
+  try { return `<figure><img src="${escapeHtml(new URL(src, baseUrl).href)}" alt="${escapeHtml(title)}" loading="eager" decoding="async"></figure>`; }
+  catch { return ""; }
 }
 
-// ─── Extract from parsed DOM ───
+// ─── Extract from DOM via Readability ───
 function extractFromDom(doc, url) {
   const clone = doc.cloneNode(true);
   const parsed = new Readability(clone, { charThreshold: 20 }).parse();
   if (!parsed) return null;
-
   const title = fixTitle(doc, parsed.title);
   const byline = fixByline(doc, parsed.byline);
-  const content = sanitizeContent(parsed.content, url);
-  const text = textFromHtml(content);
-
+  const content = sanitize(parsed.content, url);
+  const text = clean((new DOMParser().parseFromString(content, "text/html")).body?.textContent || "");
   if (!text || text.length < 100) return null;
+  return { title, byline, content: heroImage(doc, url, title) + content, textContent: text, excerpt: text.slice(0, 240) };
+}
+
+// ─── DEEP SCRAPE: When Readability under-extracts, grab all body paragraphs ───
+function deepScrape(doc, url, existingTitle = "", existingByline = "") {
+  const title = existingTitle || fixTitle(doc, "");
+  const byline = existingByline || fixByline(doc, "");
+
+  // Try known article containers first
+  const selectors = [
+    "article",
+    "[itemprop='articleBody']",
+    ".article-content",
+    ".story-content",
+    ".main-content",
+    ".content",
+    "#article-body",
+    ".entry-content",
+    ".post-content",
+  ];
+
+  let root = null;
+  for (const sel of selectors) {
+    root = doc.querySelector(sel);
+    if (root) break;
+  }
+  if (!root) root = doc.body;
+
+  const paragraphs = [];
+  const seen = new Set();
+
+  for (const p of root.querySelectorAll("p")) {
+    // Skip nav/header/footer/aside elements
+    if (p.closest("nav, header, footer, aside, form, [role='navigation']")) continue;
+
+    const text = clean(p.textContent || "");
+    if (!text || text.length < 40) continue; // Skip very short lines
+    if (seen.has(text)) continue;
+
+    // Skip paywall/sidebar paragraphs
+    const lower = text.toLowerCase();
+    if (PAYWALL_PHRASES.some(ph => lower.includes(ph))) continue;
+    if (/^(related|also read|trending|recommended|advertisement|copyright|disclaimer)/i.test(text)) continue;
+
+    seen.add(text);
+    paragraphs.push(text);
+  }
+
+  if (paragraphs.length < 2) return null;
+
+  const html = paragraphs.map(t => `<p>${escapeHtml(t)}</p>`).join("");
+  const text = paragraphs.join(" ");
 
   return {
     title,
     byline,
-    content: heroImage(doc, url, title) + content,
+    content: heroImage(doc, url, title) + html,
     textContent: text,
     excerpt: text.slice(0, 240),
   };
 }
 
-async function requestHtml(url, { timeout = CFG.FETCH_TIMEOUT, preferNative = Capacitor.isNativePlatform() } = {}) {
-  if (preferNative) {
-    const response = await CapacitorHttp.get({
-      url,
-      responseType: "text",
-      connectTimeout: timeout,
-      readTimeout: timeout,
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
-    if (response.status < 200 || response.status >= 400) throw new Error(`HTTP ${response.status}`);
-    return typeof response.data === "string" ? response.data : String(response.data || "");
-  }
-
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
-  try {
-    const response = await fetch(url, {
-      signal: controller?.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.text();
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 // ─── Strategy 1: Direct Fetch ───
 async function strategyDirect(url) {
-  const html = await requestHtml(url);
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return extractFromDom(doc, url);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CFG.FETCH_TIMEOUT);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return extractFromDom(doc, url);
+  } finally { clearTimeout(timer); }
 }
 
-// ─── Strategy 2: Render-Then-Extract ───
+// ─── Strategy 2: Direct Fetch + Deep Scrape ───
+async function strategyDeepScrape(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CFG.FETCH_TIMEOUT);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return deepScrape(doc, url);
+  } finally { clearTimeout(timer); }
+}
+
+// ─── Strategy 3: Render-Then-Extract ───
 async function strategyRender(url) {
   return new Promise((resolve, reject) => {
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
-    iframe.sandbox = "allow-same-origin allow-scripts";
+    // NOTE: no sandbox — many news sites break with sandbox restrictions
 
     let done = false;
-    let observer;
-    let poll;
-    let timeout;
     let mutations = 0;
     let lastMutation = Date.now();
     const start = Date.now();
 
-    const cleanup = () => {
-      if (done) return;
-      done = true;
-      if (observer) observer.disconnect();
-      if (poll) clearInterval(poll);
-      if (timeout) clearTimeout(timeout);
-      iframe.remove();
-    };
-
-    const fail = (message) => {
-      if (done) return;
-      cleanup();
-      reject(new Error(message));
-    };
-
-    const finish = (result) => {
-      if (done) return;
-      if (!result) {
-        fail("Readability returned null from rendered DOM");
-        return;
-      }
-      cleanup();
-      resolve(result);
-    };
-
-    timeout = setTimeout(() => fail("Render timeout"), CFG.RENDER_TIMEOUT);
+    const cleanup = () => { done = true; if (iframe.parentNode) iframe.parentNode.removeChild(iframe); };
+    const fail = (msg) => { if (!done) { done = true; cleanup(); reject(new Error(msg)); } };
+    const timeout = setTimeout(() => fail("Render timeout"), CFG.RENDER_TIMEOUT);
 
     iframe.onload = () => {
       const idoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!idoc) {
-        fail("No iframe document");
-        return;
-      }
+      if (!idoc) { fail("No iframe document"); return; }
 
-      lastMutation = Date.now();
-      observer = new MutationObserver(() => {
-        mutations++;
-        lastMutation = Date.now();
-      });
+      const observer = new MutationObserver(() => { mutations++; lastMutation = Date.now(); });
       if (idoc.body) observer.observe(idoc.body, { childList: true, subtree: true, characterData: true });
 
-      setTimeout(() => {
-        try {
-          idoc.scrollingElement?.scrollTo(0, idoc.scrollingElement.scrollHeight);
-        } catch {
-          // Some WebViews do not expose scrollingElement.scrollTo for cross-origin frames.
-        }
-      }, 600);
+      setTimeout(() => { try { idoc.scrollingElement?.scrollTo(0, idoc.scrollingElement.scrollHeight); } catch {} }, 600);
 
-      poll = setInterval(() => {
-        if (done) return;
-
+      const poll = setInterval(() => {
+        if (done) { clearInterval(poll); return; }
         const idle = Date.now() - lastMutation;
         const elapsed = Date.now() - start;
-        const hasBodyText = clean(idoc.body?.textContent || "").length > 100;
-        const settled = idle > CFG.RENDER_SETTLE_MS && (mutations > 0 || hasBodyText);
+        const settled = (idle > CFG.RENDER_SETTLE_MS && mutations > 0) || elapsed > CFG.RENDER_TIMEOUT;
         const minMet = elapsed > CFG.RENDER_MIN_WAIT;
 
         if (settled && minMet) {
+          clearInterval(poll); clearTimeout(timeout); observer.disconnect();
           try {
-            finish(extractFromDom(idoc, url));
-          } catch (error) {
-            fail(error instanceof Error ? error.message : "Rendered extraction failed");
-          }
+            const result = extractFromDom(idoc, url);
+            cleanup();
+            if (result) resolve(result);
+            else reject(new Error("Readability returned null from rendered DOM"));
+          } catch (e) { cleanup(); reject(e); }
         }
       }, 200);
     };
@@ -402,58 +323,40 @@ async function strategyRender(url) {
   });
 }
 
-// ─── Strategy 3: Archive.org Fallback ───
-function archiveReaderUrl(url) {
-  return `https://r.jina.ai/https://web.archive.org/web/2if_/${url}`;
-}
-
-async function strategyArchive(url) {
-  const html = await requestHtml(archiveReaderUrl(url), { preferNative: Capacitor.isNativePlatform() });
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return extractFromDom(doc, url);
-}
-
 // ─── Master Extractor ───
 export async function extractArticle(url) {
+  const strategies = [
+    { name: "direct", fn: () => strategyDirect(url) },
+    { name: "deep", fn: () => strategyDeepScrape(url) },
+    { name: "render", fn: () => strategyRender(url) },
+  ];
+
   const results = [];
   const errors = [];
 
-  const runStrategy = async (name, fn) => {
+  for (const strat of strategies) {
     try {
-      const raw = await fn();
-      if (!raw) return;
-      results.push({ ...raw, _strategy: name, _score: score(raw) });
-    } catch (error) {
-      errors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      const raw = await strat.fn();
+      if (!raw) continue;
+      const scored = { ...raw, _strategy: strat.name, _score: score(raw) };
+      results.push(scored);
+      if (scored._score > 2500) break;
+    } catch (e) {
+      errors.push(`${strat.name}: ${e.message}`);
     }
-  };
-
-  await runStrategy("direct", () => strategyDirect(url));
-
-  // Render only when direct extraction is absent or looks too short. This keeps
-  // ordinary pages fast while still giving lazy-rendered publishers a chance.
-  const directBest = results[0];
-  if (!directBest || isLowQuality(directBest)) await runStrategy("render", () => strategyRender(url));
-
-  // Try the public Wayback snapshot when the origin and rendered attempts do
-  // not produce a substantial article. This is a recovery path, not a login or
-  // paywall bypass, and may legitimately return no snapshot.
-  const bestBeforeArchive = results.slice().sort((a, b) => b._score - a._score)[0];
-  if (!bestBeforeArchive || isLowQuality(bestBeforeArchive)) await runStrategy("archive.org", () => strategyArchive(url));
+  }
 
   if (results.length === 0) {
-    const reason = errors.length ? ` ${errors.join("; ")}` : "";
-    throw new Error(`Could not extract article. This site may require a subscription or block automated access.${reason}`);
+    throw new Error(`Could not extract article. This site may require a subscription or block automated access.`);
   }
 
   results.sort((a, b) => b._score - a._score);
   const best = results[0];
-  const isPreview = isLowQuality(best);
+
+  const isPreview = best.textContent.length < CFG.MIN_CHARS || (best.content.match(/<p/gi) || []).length < CFG.MIN_PARAGRAPHS;
 
   return {
-    id: uid(),
-    url,
-    title: best.title,
+    id: uid(), url, title: best.title,
     byline: best.byline || sourceName(url),
     source: sourceName(url),
     content: best.content,
@@ -467,36 +370,17 @@ export async function extractArticle(url) {
   };
 }
 
-// ─── Validation ───
 export function validateUrl(value) {
-  try {
-    const u = new URL(value);
-    return ["http:", "https:"].includes(u.protocol);
-  } catch {
-    return false;
-  }
+  try { const u = new URL(value); return ["http:", "https:"].includes(u.protocol); }
+  catch { return false; }
 }
 
-// ─── Storage helpers ───
 const STORAGE_KEY = "whitemint:articles";
-
 export function loadArticles() {
-  try {
-    if (typeof localStorage === "undefined") return [];
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
+  catch { return []; }
 }
-
 export function saveArticles(articles) {
-  try {
-    if (typeof localStorage === "undefined") return false;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.isArray(articles) ? articles : []));
-    return true;
-  } catch {
-    return false;
-  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(articles)); return true; }
+  catch { return false; }
 }

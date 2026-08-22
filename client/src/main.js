@@ -6,7 +6,13 @@ import "./styles.css";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Preferences } from "@capacitor/preferences";
-import { extractArticle, sanitizeContent } from "./lib/fetcher.js";
+import { Readability } from "@mozilla/readability";
+import { extractArticle } from "./lib/fetcher.js";
+import { sanitizeContent } from "./lib/article-sanitizer.js";
+
+// fetcher_fixed.js is intentionally kept as the supplied browser module; expose
+// the installed Readability implementation for its existing global reference.
+globalThis.Readability = Readability;
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs" };
 const LIMITS = { articles: 50, logs: 160 };
