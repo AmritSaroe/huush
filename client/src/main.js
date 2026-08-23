@@ -48,6 +48,7 @@ const state = {
 };
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
+let suppressReaderTap = false;
 
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
@@ -286,7 +287,7 @@ function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. Open the source to continue reading.</p><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open in browser ${icon("external", 15)}</a></aside>` : "";
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${previewNotice}${article.content}</div><footer class="article-reading__footer"><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${previewNotice}${article.content}</div><footer class="article-reading__footer"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -560,6 +561,7 @@ document.addEventListener("scroll", (event) => {
 }, true);
 
 document.addEventListener("pointerdown", (event) => {
+  if (state.article && event.target.closest(".article-reading__body")) suppressReaderTap = false;
   const card = event.target.closest("[data-swipe-card]");
   if (!card || event.pointerType === "mouse" && event.button !== 0) return;
   closeOpenSwipes(card);
@@ -570,6 +572,7 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 document.addEventListener("pointermove", (event) => {
+  if (state.article && event.target.closest(".article-reading__body") && (Math.abs(event.movementX) > 8 || Math.abs(event.movementY) > 8)) suppressReaderTap = true;
   if (!swipeGesture.card) return;
   const delta = event.clientX - swipeGesture.startX;
   if (delta >= -10) return;
@@ -580,6 +583,7 @@ document.addEventListener("pointermove", (event) => {
 });
 
 document.addEventListener("pointerup", () => {
+  if (suppressReaderTap) window.setTimeout(() => { suppressReaderTap = false; }, 300);
   if (!swipeGesture.card) return;
   const card = swipeGesture.card;
   const id = card.dataset.id;
@@ -597,7 +601,7 @@ document.addEventListener("pointerup", () => {
 document.addEventListener("pointercancel", resetSwipeGesture);
 
 document.addEventListener("click", (event) => {
-  if (state.article && event.target.closest(".article-reading__body") && !event.target.closest("a,button,img,figure,figcaption")) { const word = wordAtPoint(event); if (word) { event.preventDefault(); state.dictionaryOpen = true; void openDictionary(word, event.clientX, event.clientY); return; } }
+  if (state.article && !suppressReaderTap && window.getSelection()?.isCollapsed !== false && event.target.closest(".article-reading__body") && !event.target.closest("a,button,img,figure,figcaption")) { const word = wordAtPoint(event); if (word) { event.preventDefault(); state.dictionaryOpen = true; void openDictionary(word, event.clientX, event.clientY); return; } }
   const actionTarget = event.target.closest("[data-action]");
   if (swipeGesture.suppressClick && actionTarget?.matches(".article-card")) {
     event.preventDefault();
