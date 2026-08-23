@@ -30,6 +30,16 @@ function headerValue(headers = {}, name) {
   return key ? String(headers[key] ?? "") : "";
 }
 
+function chooseTitle(smryTitle, fallbackTitle) {
+  const smry = String(smryTitle || "").trim();
+  const fallback = String(fallbackTitle || "").trim();
+  // smry documents that its response headers are ASCII-folded. A question mark
+  // can therefore stand in for an apostrophe, dash, or accented character.
+  // Preserve the direct publisher title whenever it retains those characters.
+  if (fallback && /[^\x00-\x7F]/.test(fallback) && smry.includes("?")) return fallback;
+  return smry || fallback || "Untitled";
+}
+
 function responseText(data) {
   if (typeof data === "string") return data;
   if (data == null) return "";
@@ -105,7 +115,7 @@ export async function extractSmryArticle(sourceUrl, fallbackArticle = null) {
   const blockCount = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length;
   if (textContent.length < 200 || blockCount < 3) throw new SmryExtractionError("smry returned only a partial article.", "partial_article");
 
-  const title = headerValue(headers, "x-smry-title") || fallbackArticle?.title || "Untitled";
+  const title = chooseTitle(headerValue(headers, "x-smry-title"), fallbackArticle?.title);
   const byline = headerValue(headers, "x-smry-author") || fallbackArticle?.byline || "";
   const publisher = headerValue(headers, "x-smry-publisher") || fallbackArticle?.source || "Article";
   const provenanceUrl = headerValue(headers, "x-smry-source") || normalizeSourceUrl(sourceUrl);
