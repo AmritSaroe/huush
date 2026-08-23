@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { handleArticleFetch, handleSmryFetch } from "./server/article-proxy";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -150,6 +151,20 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
+function vitePluginArticleFetchProxy(): Plugin {
+  return {
+    name: "whitemint-article-fetch-proxy",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/article-fetch", (req, res) => {
+        void handleArticleFetch(req, res);
+      });
+      server.middlewares.use("/api/smry-fetch", (req, res) => {
+        void handleSmryFetch(req, res);
+      });
+    },
+  };
+}
+
 function vitePluginStorageProxy(): Plugin {
   return {
     name: "manus-storage-proxy",
@@ -203,7 +218,7 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginArticleFetchProxy(), vitePluginStorageProxy()];
 
 export default defineConfig({
   plugins,

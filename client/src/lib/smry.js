@@ -3,6 +3,7 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 const SMRY_AGENT_ENDPOINT = "https://smry.ai/api/llm/article";
 const SMRY_READER_ORIGIN = "https://smry.ai/";
 const REQUEST_TIMEOUT = 20000;
+const WEB_REQUEST_TIMEOUT = 45000;
 const MAX_RESPONSE_CHARS = 500000;
 
 export class SmryExtractionError extends Error {
@@ -86,14 +87,25 @@ async function requestAgent(url) {
     return { body: responseText(response?.data), headers: response?.headers || {} };
   }
 
+  const webProxyAvailable = Boolean(globalThis.location?.origin && globalThis.location.origin !== "null");
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT) : null;
+  const timer = controller ? setTimeout(() => controller.abort(), WEB_REQUEST_TIMEOUT) : null;
   try {
     let response;
-    try {
-      response = await fetch(endpoint.toString(), { signal: controller?.signal, headers: { Accept: "text/plain" } });
-    } catch (error) {
-      throw new SmryExtractionError(error instanceof Error ? error.message : "smry request failed", "network_error");
+    if (webProxyAvailable) {
+      const proxyEndpoint = new URL("/api/smry-fetch", globalThis.location.origin);
+      proxyEndpoint.searchParams.set("url", normalizeSourceUrl(url));
+      try {
+        response = await fetch(proxyEndpoint.toString(), { signal: controller?.signal, headers: { Accept: "text/plain" } });
+      } catch (error) {
+        throw new SmryExtractionError(error instanceof Error ? error.message : "smry proxy request failed", "network_error");
+      }
+    } else {
+      try {
+        response = await fetch(endpoint.toString(), { signal: controller?.signal, headers: { Accept: "text/plain" } });
+      } catch (error) {
+        throw new SmryExtractionError(error instanceof Error ? error.message : "smry request failed", "network_error");
+      }
     }
     if (!response.ok) throw new SmryExtractionError(`smry returned HTTP ${response.status}.`, `http_${response.status}`, response.status);
     return { body: await response.text(), headers: Object.fromEntries(response.headers.entries()) };

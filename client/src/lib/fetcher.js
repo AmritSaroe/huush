@@ -10,6 +10,7 @@ import { Readability } from "@mozilla/readability";
  *   3. Deep paragraph scrape — recovers content when Readability under-extracts.
  */
 
+import { Capacitor } from "@capacitor/core";
 import { extractSmryArticle } from "./smry.js";
 
 const CFG = {
@@ -335,7 +336,24 @@ function deepScrape(doc, url, existingTitle = "", existingByline = "") {
 }
 
 // ─── Fetch raw HTML ───
-async function fetchHtml(url) {
+async function fetchHtml(url, options = {}) {
+  const canUseWebProxy = !Capacitor.isNativePlatform() && ["http:", "https:"].includes(globalThis.location?.protocol || "");
+  if (canUseWebProxy) {
+    const proxyUrl = new URL("/api/article-fetch", globalThis.location.origin);
+    proxyUrl.searchParams.set("url", url);
+    options.log?.("fetch.proxy.started", "Using Whitemint server proxy for browser import");
+    try {
+      const proxyResponse = await fetch(proxyUrl.href, { headers: { Accept: "text/html,application/xhtml+xml" } });
+      if (!proxyResponse.ok) throw new Error(`HTTP ${proxyResponse.status}`);
+      const proxiedHtml = await proxyResponse.text();
+      if (proxiedHtml.length < 500) throw new Error("Proxy returned an unexpectedly short page");
+      options.log?.("fetch.proxy.succeeded", proxyResponse.headers.get("x-whitemint-transport") || "server");
+      return proxiedHtml;
+    } catch (error) {
+      options.log?.("fetch.proxy.failed", error instanceof Error ? error.message : "Proxy request failed; trying direct fetch");
+    }
+  }
+
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), CFG.FETCH_TIMEOUT) : null;
   try {
@@ -359,7 +377,7 @@ export async function extractArticle(url, options = {}) {
   let directError = null;
 
   try {
-    const html = await fetchHtml(url);
+    const html = await fetchHtml(url, options);
     const doc = new DOMParser().parseFromString(html, "text/html");
 
     const strategies = [
