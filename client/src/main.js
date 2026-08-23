@@ -10,7 +10,6 @@ import { Readability } from "@mozilla/readability";
 import { extractArticle } from "./lib/fetcher.js";
 import { sanitizeContent } from "./lib/article-sanitizer.js";
 import { listArticles, migrateLegacyArticles, removeArticle, restoreArticle, saveArticle as storeSaveArticle, setArticleCollections } from "./lib/article-store.js";
-import { dictionarySearchUrl, lookupWord, wordFromText } from "./lib/dictionary.js";
 
 // fetcher_fixed.js is intentionally kept as the supplied browser module; expose
 // the installed Readability implementation for its existing global reference.
@@ -38,7 +37,6 @@ const state = {
   collections: [{ id: "inbox", name: "Inbox" }],
   activeCollectionId: "all",
   collectionSheet: null,
-  dictionaryOpen: false,
   settings: { ...DEFAULT_SETTINGS },
   logs: [],
   busy: false,
@@ -48,7 +46,6 @@ const state = {
 };
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
-let suppressReaderTap = false;
 
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
@@ -187,7 +184,7 @@ function showToast(message, type = "neutral", action = "") {
 }
 
 async function saveArticle(article) {
-  await storeSaveArticle(article);
+  const saved = await storeSaveArticle(article);
   state.articles = await listArticles();
   const savedCollections = await storage.get(KEYS.collections, [{ id: "inbox", name: "Inbox" }]);
   state.collections = Array.isArray(savedCollections) && savedCollections.length ? savedCollections : [{ id: "inbox", name: "Inbox" }];
@@ -199,6 +196,7 @@ async function saveArticle(article) {
     characters: article.textContent?.length || stripHtml(article.content || "").length,
     previewOnly: Boolean(article.previewOnly),
   });
+  return state.articles.find((item) => item.id === saved.id) || saved;
 }
 
 function icon(name, size = 20) {
@@ -249,10 +247,15 @@ function bottomNavigationMarkup() {
   </nav>`;
 }
 
-function collectionMarkup() { const items = [{ id: "all", name: "All articles" }, ...state.collections]; return '<div class="collection-bar" aria-label="Article collections">' + items.map((item) => '<button class="collection-chip ' + (state.activeCollectionId === item.id ? "is-active" : "") + '" data-action="set-collection" data-collection-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + '</button>').join("") + '<button class="collection-chip collection-chip--new" data-action="open-new-collection">+ New</button></div>'; }
+function collectionMarkup() {
+  const items = [{ id: "all", name: "All articles" }, ...state.collections];
+  return '<div class="collection-bar" aria-label="Article collections">' + items.map((item) => '<button class="collection-chip ' + (state.activeCollectionId === item.id ? "is-active" : "") + '" data-action="set-collection" data-collection-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + '</button>').join("") + '</div><div class="collection-tools"><button class="collection-tool" data-action="manage-collections">Manage collections</button><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New</button></div>';
+}
+function collectionManagementMarkup() {
+  const custom = state.collections.filter((item) => item.id !== "inbox");
+  return '<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet collection-sheet--manage" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Collection management</p><h2>Organize your folders.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><div class="collection-management-list">' + (custom.length ? custom.map((item) => '<div class="collection-management-row"><div><strong>' + escapeHtml(item.name) + '</strong><small>Articles stay saved if this collection is deleted.</small></div><div class="collection-management-actions"><input data-rename-collection value="' + escapeHtml(item.name) + '" maxlength="60" aria-label="Rename ' + escapeHtml(item.name) + '" /><button data-action="rename-collection" data-id="' + escapeHtml(item.id) + '">Rename</button><button class="collection-delete" data-action="delete-collection" data-id="' + escapeHtml(item.id) + '">Delete</button></div></div>').join("") : '<p class="collection-management-empty">No custom collections yet. Create one from the library.</p>') + '</div><p class="collection-management-note">Inbox is the default destination for new articles and cannot be deleted.</p></section>';
+}
 function organizeMarkup(article) { if (!state.collectionSheet || state.collectionSheet.type !== "organize") return ""; const selected = article.collectionIds || ["inbox"]; return '<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Organize article</p><h2>Choose collections.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><div class="collection-check-list">' + state.collections.map((item) => '<label><input type="checkbox" data-collection-check value="' + escapeHtml(item.id) + '" ' + (selected.includes(item.id) ? "checked" : "") + ' /><span>' + escapeHtml(item.name) + '</span></label>').join("") + '</div><button class="collection-save" data-action="save-article-collections">Save organization</button></section>'; }
-function wordAtPoint(event) { const body = event.target.closest(".article-reading__body"); if (!body || event.target.closest("a,button,img,figure,figcaption")) return ""; const range = document.caretRangeFromPoint?.(event.clientX, event.clientY) || (document.caretPositionFromPoint ? (() => { const p = document.caretPositionFromPoint(event.clientX, event.clientY); if (!p) return null; const r = document.createRange(); r.setStart(p.offsetNode, p.offset); return r; })() : null); if (!range || !body.contains(range.startContainer) || range.startContainer.nodeType !== Node.TEXT_NODE) return ""; const text = range.startContainer.textContent || ""; const left = text.slice(0, range.startOffset).match(/[\p{L}][\p{L}'’-]*$/u)?.[0] || ""; const right = text.slice(range.startOffset).match(/^[\p{L}][\p{L}'’-]*/u)?.[0] || ""; return wordFromText(left || right); }
-async function openDictionary(word, x, y) { document.querySelectorAll(".dictionary-popover,.dictionary-backdrop").forEach((node) => node.remove()); const backdrop = document.createElement("div"); backdrop.className = "dictionary-backdrop"; backdrop.dataset.action = "close-dictionary"; const popup = document.createElement("aside"); popup.className = "dictionary-popover"; popup.style.left = Math.max(12, Math.min(x, innerWidth - 336)) + "px"; popup.style.top = Math.max(12, Math.min(y, innerHeight - 250)) + "px"; popup.innerHTML = '<header><strong>' + escapeHtml(word) + '</strong><button data-action="close-dictionary" aria-label="Close definition">×</button></header><p class="dictionary-loading">Looking it up…</p>'; document.body.append(backdrop, popup); try { const data = await lookupWord(word); popup.querySelector(".dictionary-loading")?.remove(); const html = data.definitions.length ? data.definitions.map((item, i) => '<div class="dictionary-definition"><small>' + (i + 1) + ' · ' + escapeHtml(item.partOfSpeech || "definition") + '</small><p>' + escapeHtml(item.definition) + '</p>' + (item.example ? '<em>“' + escapeHtml(item.example) + '”</em>' : "") + '</div>').join("") : "<p>No definition found.</p>"; popup.insertAdjacentHTML("beforeend", html + '<a class="dictionary-search" href="' + escapeHtml(dictionarySearchUrl(word)) + '" target="_blank" rel="noopener noreferrer">Search the web</a>'); } catch (error) { popup.querySelector(".dictionary-loading")?.remove(); popup.insertAdjacentHTML("beforeend", '<p>' + escapeHtml(error.message || "The dictionary is unavailable.") + '</p><a class="dictionary-search" href="' + escapeHtml(dictionarySearchUrl(word)) + '" target="_blank" rel="noopener noreferrer">Search the web</a>'); } }
 function articleListMarkup() {
   if (!state.articles.length) {
     return `<section class="empty-library"><span class="empty-library__icon">${icon("archive", 31)}</span><div><h2>Your brief begins here.</h2><p>Save an article that deserves a little more time.</p></div></section>`;
@@ -306,7 +309,7 @@ function toastMarkup() {
 
 function render() {
   const root = document.querySelector("#root");
-  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
+  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
   applySettings();
   if (state.article) requestAnimationFrame(() => {
     const surface = document.querySelector(".reader-scroll-surface");
@@ -330,8 +333,9 @@ async function handleExtract(form) {
   render();
   try {
     const article = await extractArticle(checkedUrl.toString(), { log });
-    await saveArticle(article);
-    state.article = article;
+    const savedArticle = await saveArticle(article);
+    state.article = savedArticle;
+    state.collectionSheet = { type: "organize", articleId: savedArticle.id };
     state.articleScrollTop = 0;
     state.focusMode = false;
     state.captureOpen = false;
@@ -397,7 +401,6 @@ async function copyText(text) {
 }
 
 function navigateBack() {
-  if (state.dictionaryOpen) { document.querySelectorAll(".dictionary-popover,.dictionary-backdrop").forEach((node) => node.remove()); state.dictionaryOpen = false; return true; }
   if (state.collectionSheet) { state.collectionSheet = null; render(); return true; }
   if (state.captureOpen) {
     state.captureOpen = false;
@@ -461,14 +464,17 @@ async function handleAction(target) {
     return;
   }
   if (action === "set-collection") { state.activeCollectionId = target.dataset.collectionId || "all"; render(); return; }
+  if (action === "manage-collections") { state.collectionSheet = { type: "manage" }; render(); return; }
+  if (action === "rename-collection") { const item = state.collections.find((entry) => entry.id === target.dataset.id); const input = target.closest(".collection-management-row")?.querySelector("[data-rename-collection]"); const name = input?.value.trim().slice(0, 60); if (!item || !name) return; if (state.collections.some((entry) => entry.id !== item.id && entry.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } item.name = name; await storage.set(KEYS.collections, state.collections); render(); return; }
+  if (action === "delete-collection") { const id = target.dataset.id; const item = state.collections.find((entry) => entry.id === id); if (!item || item.id === "inbox") return; if (!window.confirm(`Delete the “${item.name}” collection? Articles will be kept.`)) return; const articles = await listArticles(); await Promise.all(articles.filter((article) => article.collectionIds?.includes(id)).map((article) => setArticleCollections(article.id, article.collectionIds.filter((entry) => entry !== id)))); state.collections = state.collections.filter((entry) => entry.id !== id); if (state.activeCollectionId === id) state.activeCollectionId = "all"; state.articles = await listArticles(); if (state.article) state.article = state.articles.find((article) => article.id === state.article.id) || state.article; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
   if (action === "open-new-collection") { state.collectionSheet = { type: "new" }; render(); requestAnimationFrame(() => document.querySelector("[data-collection-name]")?.focus()); return; }
   if (action === "close-collection-sheet") { state.collectionSheet = null; render(); return; }
   if (action === "create-collection") { const input = document.querySelector("[data-collection-name]"); const name = input?.value.trim().slice(0, 60); if (!name) return; if (state.collections.some((item) => item.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } state.collections = [...state.collections, { id: `collection-${Date.now()}`, name }]; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
   if (action === "open-organize") { state.collectionSheet = { type: "organize", articleId: target.dataset.id }; render(); return; }
   if (action === "save-article-collections") { const article = state.articles.find((item) => item.id === state.collectionSheet?.articleId); if (article) { const ids = [...document.querySelectorAll("[data-collection-check]:checked")].map((input) => input.value); await setArticleCollections(article.id, ids); state.articles = await listArticles(); if (state.article?.id === article.id) state.article = state.articles.find((item) => item.id === article.id) || state.article; } state.collectionSheet = null; render(); return; }
-  if (action === "close-dictionary") { document.querySelectorAll(".dictionary-popover,.dictionary-backdrop").forEach((node) => node.remove()); state.dictionaryOpen = false; return; }
   if (action === "open-article") {
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
+    state.collectionSheet = null;
     state.articleScrollTop = 0;
     state.focusMode = false;
     if (state.article) log("article.opened", state.article.title.slice(0, 80));
@@ -561,7 +567,6 @@ document.addEventListener("scroll", (event) => {
 }, true);
 
 document.addEventListener("pointerdown", (event) => {
-  if (state.article && event.target.closest(".article-reading__body")) suppressReaderTap = false;
   const card = event.target.closest("[data-swipe-card]");
   if (!card || event.pointerType === "mouse" && event.button !== 0) return;
   closeOpenSwipes(card);
@@ -572,7 +577,6 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 document.addEventListener("pointermove", (event) => {
-  if (state.article && event.target.closest(".article-reading__body") && (Math.abs(event.movementX) > 8 || Math.abs(event.movementY) > 8)) suppressReaderTap = true;
   if (!swipeGesture.card) return;
   const delta = event.clientX - swipeGesture.startX;
   if (delta >= -10) return;
@@ -583,7 +587,6 @@ document.addEventListener("pointermove", (event) => {
 });
 
 document.addEventListener("pointerup", () => {
-  if (suppressReaderTap) window.setTimeout(() => { suppressReaderTap = false; }, 300);
   if (!swipeGesture.card) return;
   const card = swipeGesture.card;
   const id = card.dataset.id;
@@ -601,7 +604,6 @@ document.addEventListener("pointerup", () => {
 document.addEventListener("pointercancel", resetSwipeGesture);
 
 document.addEventListener("click", (event) => {
-  if (state.article && !suppressReaderTap && window.getSelection()?.isCollapsed !== false && event.target.closest(".article-reading__body") && !event.target.closest("a,button,img,figure,figcaption")) { const word = wordAtPoint(event); if (word) { event.preventDefault(); state.dictionaryOpen = true; void openDictionary(word, event.clientX, event.clientY); return; } }
   const actionTarget = event.target.closest("[data-action]");
   if (swipeGesture.suppressClick && actionTarget?.matches(".article-card")) {
     event.preventDefault();
