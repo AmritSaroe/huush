@@ -179,8 +179,8 @@ function showToast(message, type = "neutral", action = "") {
 }
 
 async function saveArticle(article) {
-  state.articles = [article, ...state.articles.filter((saved) => saved.url !== article.url)].slice(0, LIMITS.articles);
-  await storage.set(KEYS.articles, state.articles);
+  await storeSaveArticle(article);
+  state.articles = await listArticles();
   log("article.saved", {
     source: article.source,
     title: article.title.slice(0, 80),
