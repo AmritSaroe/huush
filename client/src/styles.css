@@ -28,3 +28,10 @@
 .dashboard-topbar .brand__name{white-space:nowrap;}
 .dashboard-topbar .topbar-action{justify-self:end;min-width:64px;padding:10px 8px;text-align:center;}
 @media (max-width:360px){.dashboard-topbar{grid-template-columns:44px minmax(0,1fr) 58px;gap:6px}.dashboard-topbar .topbar-action{min-width:58px;padding-right:4px;padding-left:4px}.dashboard-topbar .brand{gap:5px}.dashboard-topbar .brand__name{font-size:18px}}
+/* Diagnostics header: back — brand — clear */
+.dashboard-topbar{display:grid;grid-template-columns:48px minmax(0,1fr) 64px;align-items:center;gap:10px;width:100%;}
+.dashboard-topbar .profile-tile{grid-column:1;justify-self:start;}
+.dashboard-topbar .brand{grid-column:2;justify-self:center;min-width:0;}
+.dashboard-topbar .brand__name{white-space:nowrap;}
+.dashboard-topbar .topbar-action{grid-column:3;justify-self:end;min-width:64px;padding:10px 8px;text-align:center;}
+@media (max-width:360px){.dashboard-topbar{grid-template-columns:44px minmax(0,1fr) 58px;gap:6px}.dashboard-topbar .topbar-action{min-width:58px;padding-right:4px;padding-left:4px}.dashboard-topbar .brand{gap:5px}.dashboard-topbar .brand__name{font-size:18px}}
