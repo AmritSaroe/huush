@@ -8,6 +8,7 @@ import { App as CapacitorApp } from "@capacitor/app";
 import { Preferences } from "@capacitor/preferences";
 import { Readability } from "@mozilla/readability";
 import { extractArticle } from "./lib/fetcher.js";
+import { extractSmryArticle, getSmryReaderUrl } from "./lib/smry.js";
 import { sanitizeContent } from "./lib/article-sanitizer.js";
 import { listArticles, migrateLegacyArticles, removeArticle, restoreArticle, saveArticle as storeSaveArticle, setArticleCollections } from "./lib/article-store.js";
 
@@ -40,6 +41,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
   logs: [],
   busy: false,
+  smryBusy: false,
   toast: null,
   pendingDelete: null,
   loggedImageUrls: new Set(),
@@ -289,7 +291,7 @@ function debugMarkup() {
 function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
-  const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. Open the source to continue reading.</p><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open in browser ${icon("external", 15)}</a></aside>` : "";
+  const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
   return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${previewNotice}${article.content}</div><footer class="article-reading__footer"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
@@ -345,6 +347,26 @@ async function handleExtract(form) {
     showToast("Couldn’t save this article. Check the diagnostic log if it continues.", "error");
   } finally {
     state.busy = false;
+    render();
+  }
+}
+
+async function retryWithSmry() {
+  if (!state.article || state.smryBusy) return;
+  const sourceArticle = state.article;
+  state.smryBusy = true;
+  render();
+  try {
+    const smryArticle = await extractSmryArticle(sourceArticle.url, sourceArticle);
+    const savedArticle = await saveArticle({ ...sourceArticle, ...smryArticle, id: sourceArticle.id, collectionIds: sourceArticle.collectionIds });
+    state.article = savedArticle;
+    log("article.smry.loaded", `${smryArticle.provenance.blocks} blocks · ${smryArticle.textContent.length} characters`);
+    showToast("Full article loaded via smry.", "success");
+  } catch (error) {
+    log("article.smry.failed", error instanceof Error ? `${error.code || "error"} · ${error.message}` : "smry extraction failed");
+    showToast("smry could not retrieve the full article. Try the source in your browser.", "error");
+  } finally {
+    state.smryBusy = false;
     render();
   }
 }
@@ -519,6 +541,10 @@ async function handleAction(target) {
   if (action === "toggle-theme") {
     state.settings.theme = state.settings.theme === "light" ? "dark" : state.settings.theme === "dark" ? "sepia" : "light";
     await persistSettings();
+    return;
+  }
+  if (action === "retry-smry") {
+    await retryWithSmry();
     return;
   }
   if (action === "copy-source" && state.article) {

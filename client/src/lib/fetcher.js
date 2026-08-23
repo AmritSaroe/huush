@@ -10,6 +10,8 @@ import { Readability } from "@mozilla/readability";
  *   3. Deep paragraph scrape — recovers content when Readability under-extracts.
  */
 
+import { extractSmryArticle } from "./smry.js";
+
 const CFG = {
   MIN_CHARS: 1200,
   MIN_PARAGRAPHS: 3,
@@ -340,46 +342,75 @@ async function fetchHtml(url) {
 }
 
 // ─── Master Extractor ───
-export async function extractArticle(url) {
-  const html = await fetchHtml(url);
-  const doc = new DOMParser().parseFromString(html, "text/html");
+export async function extractArticle(url, options = {}) {
+  let directArticle = null;
+  let directError = null;
 
-  const strategies = [
-    { name: "json", fn: () => extractFromJson(doc, url) },
-    { name: "readability", fn: () => extractFromDom(doc, url) },
-    { name: "deep", fn: () => deepScrape(doc, url) },
-  ];
+  try {
+    const html = await fetchHtml(url);
+    const doc = new DOMParser().parseFromString(html, "text/html");
 
-  const results = [];
-  for (const strat of strategies) {
-    try {
-      const raw = strat.fn();
-      if (!raw) continue;
-      const scored = { ...raw, _strategy: strat.name, _score: score(raw) };
-      results.push(scored);
-      if (scored._score > 2500) break;
-    } catch (e) { console.log(`${strat.name} failed:`, e.message); }
+    const strategies = [
+      { name: "json", fn: () => extractFromJson(doc, url) },
+      { name: "readability", fn: () => extractFromDom(doc, url) },
+      { name: "deep", fn: () => deepScrape(doc, url) },
+    ];
+
+    const results = [];
+    for (const strat of strategies) {
+      try {
+        const raw = strat.fn();
+        if (!raw) continue;
+        const scored = { ...raw, _strategy: strat.name, _score: score(raw) };
+        results.push(scored);
+        if (scored._score > 2500) break;
+      } catch (error) { console.log(`${strat.name} failed:`, error.message); }
+    }
+
+    if (results.length === 0) throw new Error("Could not extract article. This site may require a subscription.");
+    results.sort((a, b) => b._score - a._score);
+    const best = results[0];
+    directArticle = {
+      id: uid(), url, title: best.title,
+      byline: best.byline || sourceName(url),
+      source: sourceName(url),
+      content: best.content,
+      textContent: best.textContent,
+      excerpt: best.excerpt,
+      readingMinutes: readTime(best.textContent),
+      dateAdded: new Date().toISOString(),
+      previewOnly: isLowQuality(best),
+      strategy: best._strategy,
+      score: Math.round(best._score),
+    };
+  } catch (error) {
+    directError = error;
+    options.log?.("fetch.direct.failed", error instanceof Error ? error.message : "Direct extraction failed");
   }
 
-  if (results.length === 0) throw new Error("Could not extract article. This site may require a subscription.");
+  if (directArticle && !directArticle.previewOnly) return directArticle;
 
-  results.sort((a, b) => b._score - a._score);
-  const best = results[0];
-  const isPreview = isLowQuality(best);
+  try {
+    options.log?.("fetch.smry.started", "Incomplete public result; trying smry agent extraction");
+    const smryArticle = await extractSmryArticle(url, directArticle);
+    const article = {
+      ...(directArticle || {}),
+      ...smryArticle,
+      id: directArticle?.id || uid(),
+      url,
+      dateAdded: directArticle?.dateAdded || new Date().toISOString(),
+      readingMinutes: readTime(smryArticle.textContent),
+      previewOnly: false,
+      score: Math.round(score(smryArticle)),
+    };
+    options.log?.("fetch.smry.succeeded", `${smryArticle.provenance.blocks} blocks · ${smryArticle.textContent.length} characters`);
+    return article;
+  } catch (error) {
+    options.log?.("fetch.smry.failed", error instanceof Error ? `${error.code || "error"} · ${error.message}` : "smry extraction failed");
+  }
 
-  return {
-    id: uid(), url, title: best.title,
-    byline: best.byline || sourceName(url),
-    source: sourceName(url),
-    content: best.content,
-    textContent: best.textContent,
-    excerpt: best.excerpt,
-    readingMinutes: readTime(best.textContent),
-    dateAdded: new Date().toISOString(),
-    previewOnly: isPreview,
-    strategy: best._strategy,
-    score: Math.round(best._score),
-  };
+  if (directArticle) return directArticle;
+  throw directError || new Error("Could not extract article. This site may require a subscription.");
 }
 
 export function validateUrl(value) {

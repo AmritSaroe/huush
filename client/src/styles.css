@@ -58,3 +58,12 @@ html[data-theme="sepia"] .theme-choice.is-active,html[data-theme="sepia"] .font-
 .collection-management-row>div:first-child{display:grid;gap:4px}.collection-management-row strong{font-size:17px}.collection-management-row small,.collection-management-note{color:var(--muted);font-size:13px;line-height:1.4}
 .collection-management-actions{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center}.collection-management-actions input{min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--soft);color:var(--ink);padding:10px 11px}.collection-management-actions button{border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);padding:10px 9px;font-size:12px;font-weight:700}.collection-management-actions .collection-delete{border-color:var(--negative);color:var(--negative)}.collection-management-empty{margin:22px 0;color:var(--muted);line-height:1.5}.collection-management-note{margin:18px 0 0}.collection-organize-button{border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink);padding:8px 12px;font-size:13px;font-weight:700}.collection-check-list input{accent-color:var(--lime-deep)}
 @media (max-width:390px){.collection-tools{margin-inline:4px}.collection-chip{padding-inline:13px}.collection-management-actions{grid-template-columns:minmax(0,1fr) auto}.collection-management-actions .collection-delete{grid-column:2}.collection-sheet{padding-inline:20px}}
+
+/* smry fallback actions */
+.article-preview-notice__actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px 15px}
+.article-preview-notice__actions button,.article-preview-notice__actions a{display:inline-flex;align-items:center;gap:6px;min-height:42px;padding:9px 12px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);font-size:13px;font-weight:800;text-decoration:none}
+.article-preview-notice__actions button{cursor:pointer}
+.article-preview-notice__actions button:first-child{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.article-preview-notice__actions button:disabled{cursor:wait;opacity:.65}
+html[data-theme="sepia"] .article-preview-notice__actions button:first-child{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+@media (max-width:390px){.article-preview-notice__actions{align-items:stretch;flex-direction:column}.article-preview-notice__actions button,.article-preview-notice__actions a{justify-content:center;width:100%}}
