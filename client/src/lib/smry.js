@@ -37,7 +37,8 @@ function chooseTitle(smryTitle, fallbackTitle) {
   // can therefore stand in for an apostrophe, dash, or accented character.
   // Preserve the direct publisher title whenever it retains those characters.
   if (fallback && /[^\x00-\x7F]/.test(fallback) && smry.includes("?")) return fallback;
-  return smry || fallback || "Untitled";
+  const repaired = smry.replace(/\?([A-Za-z])/g, "’$1");
+  return repaired || fallback || "Untitled";
 }
 
 function responseText(data) {
@@ -126,6 +127,7 @@ export async function extractSmryArticle(sourceUrl, fallbackArticle = null) {
     content: `${extractHeroHtml(fallbackArticle)}${blocksToHtml(body)}`,
     textContent,
     excerpt: textContent.slice(0, 240),
+    previewOnly: textContent.length < 1200 || blockCount < 3,
     provider: "smry",
     strategy: "smry-agent",
     provenance: { provider: "smry", sourceUrl: provenanceUrl, blocks: blockCount, tokens: headerValue(headers, "x-smry-tokens") },

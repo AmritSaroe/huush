@@ -412,7 +412,7 @@ export async function extractArticle(url, options = {}) {
       url,
       dateAdded: directArticle?.dateAdded || new Date().toISOString(),
       readingMinutes: readTime(smryArticle.textContent),
-      previewOnly: false,
+      previewOnly: Boolean(smryArticle.previewOnly),
       score: Math.round(score(smryArticle)),
     };
     options.log?.("fetch.smry.succeeded", `${smryArticle.provenance.blocks} blocks · ${smryArticle.textContent.length} characters`);
