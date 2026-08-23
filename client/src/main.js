@@ -9,13 +9,14 @@ import { Preferences } from "@capacitor/preferences";
 import { Readability } from "@mozilla/readability";
 import { extractArticle } from "./lib/fetcher.js";
 import { sanitizeContent } from "./lib/article-sanitizer.js";
+import { listArticles, migrateLegacyArticles, removeArticle, restoreArticle, saveArticle as storeSaveArticle } from "./lib/article-store.js";
 
 // fetcher_fixed.js is intentionally kept as the supplied browser module; expose
 // the installed Readability implementation for its existing global reference.
 globalThis.Readability = Readability;
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs" };
-const LIMITS = { articles: 50, logs: 160 };
+const LIMITS = { logs: 160 };
 const DEFAULT_SETTINGS = { theme: "light", font: "sans", fontSize: 18 };
 const FONTS = [
   { id: "sans", label: "Inter", family: "var(--font-sans)" },
@@ -332,9 +333,9 @@ async function handleExtract(form) {
 async function deleteArticle(id) {
   const index = state.articles.findIndex((article) => article.id === id);
   if (index < 0) return;
-  const [article] = state.articles.splice(index, 1);
+  const article = await removeArticle(id);
+  state.articles = state.articles.filter((saved) => saved.id !== id);
   state.pendingDelete = { article, index };
-  await storage.set(KEYS.articles, state.articles);
   log("article.deleted", article.title.slice(0, 80));
   showToast("Article removed.", "neutral", "undo-delete");
 }
@@ -342,9 +343,9 @@ async function deleteArticle(id) {
 async function undoDelete() {
   if (!state.pendingDelete) return;
   const { article, index } = state.pendingDelete;
-  state.articles.splice(Math.min(index, state.articles.length), 0, article);
+  await restoreArticle(article);
+  state.articles = await listArticles();
   state.pendingDelete = null;
-  await storage.set(KEYS.articles, state.articles);
   log("article.restored", article.title.slice(0, 80));
   showToast("Article restored.", "success");
 }
@@ -625,10 +626,11 @@ async function setupNativeBackHandling() {
 }
 
 async function init() {
-  [state.articles, state.settings, state.logs] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get(KEYS.logs, [])]);
-  state.settings = normalizeSettings(state.settings);
-  state.articles = Array.isArray(state.articles) ? state.articles.slice(0, LIMITS.articles).map((article) => ({ ...article, content: sanitizeArticleHtml(article.content || "", article.url || "") })) : [];
-  state.logs = Array.isArray(state.logs) ? state.logs.slice(0, LIMITS.logs) : [];
+  const [legacyArticles, savedSettings, savedLogs] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get(KEYS.logs, [])]);
+  state.settings = normalizeSettings(savedSettings);
+  state.logs = Array.isArray(savedLogs) ? savedLogs.slice(0, LIMITS.logs) : [];
+  await migrateLegacyArticles(Array.isArray(legacyArticles) ? legacyArticles : [], log);
+  state.articles = await listArticles();
   log("app.ready", `${Capacitor.getPlatform()} · ${Capacitor.isNativePlatform() ? "native HTTP ready" : "web preview"}`);
   await setupNativeBackHandling();
   render();
