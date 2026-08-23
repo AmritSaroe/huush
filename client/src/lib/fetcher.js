@@ -44,7 +44,12 @@ function sourceName(url) {
   try {
     const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
     const mapped = Object.keys(SOURCE_MAP).find(domain => h === domain || h.endsWith(`.${domain}`));
-    return mapped ? SOURCE_MAP[mapped] : h;
+    if (mapped) return SOURCE_MAP[mapped];
+    const parts = h.split(".").filter(Boolean);
+    const compoundTlds = new Set(["co.uk", "org.uk", "com.au", "co.in", "com.br", "co.nz"]);
+    const suffix = parts.slice(-2).join(".");
+    const brand = parts[Math.max(0, parts.length - (compoundTlds.has(suffix) ? 3 : 2))] || h;
+    return brand.split(/[-_]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || "Article";
   } catch { return "Article"; }
 }
 function readTime(text = "") { return Math.max(1, Math.round(clean(text).split(/\s+/).filter(Boolean).length / 200)); }
@@ -127,11 +132,18 @@ function fixByline(doc, fallback = "") {
   return clean(fallback) || clean(doc.querySelector('meta[name="author"]')?.content) || clean(doc.querySelector('[itemprop="author"]')?.textContent) || "";
 }
 
-function heroImage(doc, baseUrl, title) {
+function heroImage(doc, baseUrl, title, bodyHtml = "") {
   const src = [doc.querySelector('meta[property="og:image"]')?.content, doc.querySelector('meta[name="twitter:image"]')?.content].find(Boolean);
   if (!src) return "";
-  try { return `<figure><img src="${escapeHtml(new URL(src, baseUrl).href)}" alt="${escapeHtml(title)}" loading="eager" decoding="async"></figure>`; }
-  catch { return ""; }
+  try {
+    const resolved = new URL(src, baseUrl).href;
+    const bodyDoc = new DOMParser().parseFromString(bodyHtml, "text/html");
+    const bodyImages = [...bodyDoc.querySelectorAll("img")].map((image) => image.getAttribute("src")).filter(Boolean).map((value) => {
+      try { return new URL(value, baseUrl).href; } catch { return ""; }
+    });
+    if (bodyImages.includes(resolved)) return "";
+    return `<figure><img src="${escapeHtml(resolved)}" alt="${escapeHtml(title)}" loading="eager" decoding="async"></figure>`;
+  } catch { return ""; }
 }
 
 // ─── Embedded JSON extraction ───
@@ -277,7 +289,7 @@ function extractFromJson(doc, url) {
   return {
     title,
     byline,
-    content: heroImage(doc, url, title) + content,
+    content: heroImage(doc, url, title, content) + content,
     textContent: text,
     excerpt: text.slice(0, 240),
   };
@@ -292,7 +304,7 @@ function extractFromDom(doc, url) {
   const content = sanitize(parsed.content, url);
   const text = textFromHtml(content);
   if (!text || text.length < 100) return null;
-  return { title, byline, content: heroImage(doc, url, title) + content, textContent: text, excerpt: text.slice(0, 240) };
+  return { title, byline, content: heroImage(doc, url, title, content) + content, textContent: text, excerpt: text.slice(0, 240) };
 }
 
 // ─── Strategy 3: Deep paragraph scrape ───
@@ -319,7 +331,7 @@ function deepScrape(doc, url, existingTitle = "", existingByline = "") {
   if (paragraphs.length < 2) return null;
   const html = paragraphs.map(t => `<p>${escapeHtml(t)}</p>`).join("");
   const text = paragraphs.join(" ");
-  return { title, byline, content: heroImage(doc, url, title) + html, textContent: text, excerpt: text.slice(0, 240) };
+  return { title, byline, content: heroImage(doc, url, title, html) + html, textContent: text, excerpt: text.slice(0, 240) };
 }
 
 // ─── Fetch raw HTML ───

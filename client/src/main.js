@@ -42,6 +42,7 @@ const state = {
   logs: [],
   busy: false,
   smryBusy: false,
+  smryRequestToken: null,
   toast: null,
   pendingDelete: null,
   loggedImageUrls: new Set(),
@@ -68,6 +69,14 @@ const stripHtml = (value = "") => {
   shell.innerHTML = value;
   return (shell.textContent || shell.innerText || "").replace(/\s+/g, " ").trim();
 };
+
+function articleReadingTime(article) {
+  const stored = Number(article?.readingMinutes);
+  if (Number.isFinite(stored) && stored > 0) return `${Math.max(1, Math.round(stored))} min read`;
+  const text = String(article?.textContent || stripHtml(article?.content || "")).trim();
+  if (!text) return "";
+  return `${Math.max(1, Math.round(text.split(/\s+/).filter(Boolean).length / 200))} min read`;
+}
 
 const storage = {
   async get(key, fallback) {
@@ -139,6 +148,8 @@ function applySettings() {
   const root = document.documentElement;
   root.dataset.theme = state.settings.theme;
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
+  const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#eee2c5" }[state.settings.theme] || "#f4f4f1";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   root.classList.toggle("dark", state.settings.theme === "dark");
   root.classList.toggle("sepia", state.settings.theme === "sepia");
   const article = document.querySelector(".article-reading");
@@ -266,7 +277,7 @@ function articleListMarkup() {
   }
   return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>${state.activeCollectionId === "all" ? "Saved articles" : escapeHtml(state.collections.find((item) => item.id === state.activeCollectionId)?.name || "Collection")}</p><h2>Worth a return.</h2></div></div><div class="article-card-list">${visibleArticles.map((article) => {
     const preview = articlePreviewImage(article);
-    return `<div class="swipe-card" data-swipe-card data-id="${article.id}"><button class="swipe-card__delete" data-action="delete-article" data-id="${article.id}" aria-label="Delete ${escapeHtml(article.title)}">${icon("trash", 20)}<span>Delete</span></button><button class="article-card" data-action="open-article" data-id="${article.id}">${preview ? `<img class="article-card__image" src="${escapeHtml(preview)}" alt="" loading="lazy" />` : `<span class="article-card__image article-card__image--empty">${icon("book", 34)}</span>`}<span class="article-card__copy"><span class="article-card__source"><b>${escapeHtml(sourceInitials(article.source))}</b>${escapeHtml(article.source)}</span><strong>${escapeHtml(article.title)}</strong><small>${article.readingMinutes} min read · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button></div>`;
+    return `<div class="swipe-card" data-swipe-card data-id="${article.id}"><button class="swipe-card__delete" data-action="delete-article" data-id="${article.id}" aria-label="Delete ${escapeHtml(article.title)}">${icon("trash", 20)}<span>Delete</span></button><button class="article-card" data-action="open-article" data-id="${article.id}">${preview ? `<img class="article-card__image" src="${escapeHtml(preview)}" alt="" loading="lazy" />` : `<span class="article-card__image article-card__image--empty">${icon("book", 34)}</span>`}<span class="article-card__copy"><span class="article-card__source"><b>${escapeHtml(sourceInitials(article.source))}</b>${escapeHtml(article.source)}${article.previewOnly ? '<em class="article-card__status">Preview</em>' : ""}</span><strong>${escapeHtml(article.title)}</strong><small>${articleReadingTime(article)} · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button></div>`;
   }).join("")}</div></section>`;
 }
 
@@ -282,7 +293,7 @@ function libraryMarkup() {
 function captureMarkup() {
   if (!state.captureOpen) return "";
   const busy = state.busy ? "is-busy" : "";
-  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste a public article link. whitemint will fetch and clean it on your device.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Your saved reading stays private to this device.</p></section>`;
+  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste a public article link. whitemint fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
 }
 
 function debugMarkup() {
@@ -294,7 +305,7 @@ function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("bookmark", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${article.readingMinutes} min read</span></div></section><div class="article-reading__body">${previewNotice}${article.content}</div><footer class="article-reading__footer"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button><span>Saved in whitemint</span><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${article.content}</div><footer class="article-reading__footer"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button><span>Saved in whitemint</span>${article.previewOnly ? "" : `<a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -353,23 +364,36 @@ async function handleExtract(form) {
   }
 }
 
+function invalidateSmryRequest() {
+  state.smryRequestToken = null;
+  state.smryBusy = false;
+}
+
 async function retryWithSmry() {
   if (!state.article || state.smryBusy) return;
   const sourceArticle = state.article;
+  const requestToken = Symbol("smry-request");
+  state.smryRequestToken = requestToken;
   state.smryBusy = true;
   render();
   try {
     const smryArticle = await extractSmryArticle(sourceArticle.url, sourceArticle);
+    if (state.smryRequestToken !== requestToken || state.article?.id !== sourceArticle.id) return;
     const savedArticle = await saveArticle({ ...sourceArticle, ...smryArticle, id: sourceArticle.id, collectionIds: sourceArticle.collectionIds });
+    if (state.smryRequestToken !== requestToken || state.article?.id !== sourceArticle.id) return;
     state.article = savedArticle;
     log("article.smry.loaded", `${smryArticle.provenance.blocks} blocks · ${smryArticle.textContent.length} characters`);
     showToast("Full article loaded via smry.", "success");
   } catch (error) {
+    if (state.smryRequestToken !== requestToken || state.article?.id !== sourceArticle.id) return;
     log("article.smry.failed", error instanceof Error ? `${error.code || "error"} · ${error.message}` : "smry extraction failed");
     showToast("smry could not retrieve the full article. Try the source in your browser.", "error");
   } finally {
-    state.smryBusy = false;
-    render();
+    if (state.smryRequestToken === requestToken) {
+      state.smryRequestToken = null;
+      state.smryBusy = false;
+      render();
+    }
   }
 }
 
@@ -441,6 +465,7 @@ function navigateBack() {
     return true;
   }
   if (state.article) {
+    invalidateSmryRequest();
     state.article = null;
     state.articleScrollTop = 0;
     state.activeTab = "library";
@@ -459,6 +484,7 @@ async function handleAction(target) {
   const action = target.dataset.action;
   if (!action) return;
   if (action === "show-library") {
+    invalidateSmryRequest();
     state.activeTab = "library";
     state.article = null;
     state.captureOpen = false;
@@ -467,6 +493,7 @@ async function handleAction(target) {
     return;
   }
   if (action === "show-debug") {
+    invalidateSmryRequest();
     state.activeTab = "debug";
     state.article = null;
     state.captureOpen = false;
@@ -497,6 +524,7 @@ async function handleAction(target) {
   if (action === "open-organize") { state.collectionSheet = { type: "organize", articleId: target.dataset.id }; render(); return; }
   if (action === "save-article-collections") { const article = state.articles.find((item) => item.id === state.collectionSheet?.articleId); if (article) { const ids = [...document.querySelectorAll("[data-collection-check]:checked")].map((input) => input.value); await setArticleCollections(article.id, ids); state.articles = await listArticles(); if (state.article?.id === article.id) state.article = state.articles.find((item) => item.id === article.id) || state.article; } state.collectionSheet = null; render(); return; }
   if (action === "open-article") {
+    invalidateSmryRequest();
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
     state.collectionSheet = null;
     state.articleScrollTop = 0;
