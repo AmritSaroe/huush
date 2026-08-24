@@ -85,6 +85,12 @@ const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppress
 let nativeStatusBarConfigured = false;
 let nativeStatusBarStyle = "";
 let nativeStatusBarColor = "";
+let lastStatusBarConfig = "";
+let pendingStatusBarConfig = null;
+let nativeStatusBarSyncPromise = null;
+let settingsLogTimeout = 0;
+let settingsInteractionUnlockTimeout = 0;
+let settingsInteractionLocked = false;
 let readerLastScrollTop = 0;
 let fontSizeUpdateFrame = 0;
 let fontSizePersistTimeout = 0;
@@ -151,10 +157,26 @@ const storage = {
 };
 
 function log(event, detail = "", { refreshDebug = true } = {}) {
+  if (event === "status-bar.state") return;
   const entry = { time: new Date().toISOString(), event, detail: typeof detail === "string" ? detail : JSON.stringify(detail) };
   state.logs = [entry, ...state.logs].slice(0, LIMITS.logs);
   void storage.set(KEYS.logs, state.logs);
-  if (refreshDebug && state.activeTab === "settings" && !state.article) render();
+  if (refreshDebug && state.activeTab === "settings" && !state.article && state.diagnosticsOpen) refreshDiagnosticsOnly();
+}
+
+function queueSettingsLog() {
+  window.clearTimeout(settingsLogTimeout);
+  settingsLogTimeout = window.setTimeout(() => {
+    log("settings.updated", state.settings, { refreshDebug: false });
+  }, 500);
+}
+
+function beginSettingsInteraction() {
+  if (settingsInteractionLocked) return false;
+  settingsInteractionLocked = true;
+  window.clearTimeout(settingsInteractionUnlockTimeout);
+  settingsInteractionUnlockTimeout = window.setTimeout(() => { settingsInteractionLocked = false; }, 400);
+  return true;
 }
 
 function safeUrlForLog(value) {
@@ -194,29 +216,42 @@ function sanitizeArticleHtml(html, baseUrl, heroFallback = "") {
   return container.innerHTML;
 }
 
-async function syncNativeStatusBar() {
+function syncNativeStatusBar() {
   if (!Capacitor.isNativePlatform()) return;
-  try {
-    if (!nativeStatusBarConfigured) {
-      await StatusBar.setOverlaysWebView({ overlay: false });
-      nativeStatusBarConfigured = true;
+  const theme = effectiveTheme();
+  const style = theme === "dark" ? Style.Dark : Style.Light;
+  const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[theme] || "#FAFAF8";
+  const configKey = `${theme}-${style}-${themeColor}`;
+  if (lastStatusBarConfig === configKey) return;
+  pendingStatusBarConfig = { theme, style, themeColor, configKey };
+  if (nativeStatusBarSyncPromise) return;
+  nativeStatusBarSyncPromise = (async () => {
+    try {
+      while (pendingStatusBarConfig) {
+        const next = pendingStatusBarConfig;
+        pendingStatusBarConfig = null;
+        if (!nativeStatusBarConfigured) {
+          await StatusBar.setOverlaysWebView({ overlay: false });
+          nativeStatusBarConfigured = true;
+        }
+        if (nativeStatusBarStyle !== next.style) {
+          await StatusBar.setStyle({ style: next.style });
+          nativeStatusBarStyle = next.style;
+        }
+        if (nativeStatusBarColor !== next.themeColor) {
+          await StatusBar.setBackgroundColor({ color: next.themeColor });
+          nativeStatusBarColor = next.themeColor;
+        }
+        lastStatusBarConfig = next.configKey;
+      }
+    } catch (error) {
+      lastStatusBarConfig = "";
+      log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable", { refreshDebug: false });
+    } finally {
+      nativeStatusBarSyncPromise = null;
+      if (pendingStatusBarConfig) syncNativeStatusBar();
     }
-    const theme = effectiveTheme();
-    const style = theme === "dark" ? Style.Dark : Style.Light;
-    if (nativeStatusBarStyle !== style) {
-      await StatusBar.setStyle({ style });
-      nativeStatusBarStyle = style;
-    }
-    const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[theme] || "#FAFAF8";
-    if (nativeStatusBarColor !== themeColor) {
-      await StatusBar.setBackgroundColor({ color: themeColor });
-      nativeStatusBarColor = themeColor;
-    }
-    const info = await StatusBar.getInfo();
-    log("status-bar.state", info, { refreshDebug: false });
-  } catch (error) {
-    log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable");
-  }
+  })();
 }
 
 function effectiveTheme() {
@@ -253,16 +288,24 @@ function applySettings() {
     article.dataset.font = state.settings.font;
     article.dataset.readingFont = state.settings.font;
   }
-  void syncNativeStatusBar();
+  syncNativeStatusBar();
 }
 
 function syncPreferenceControls() {
-  document.querySelectorAll("[data-action='set-font']").forEach((control) => control.classList.toggle("is-active", control.dataset.font === state.settings.font));
+  document.querySelectorAll("[data-action='set-font']").forEach((control) => {
+    const active = control.dataset.font === state.settings.font;
+    const font = FONTS.find((item) => item.id === control.dataset.font) || FONTS[0];
+    control.classList.toggle("is-active", active);
+    control.setAttribute("aria-checked", active ? "true" : "false");
+    control.setAttribute("aria-label", `${font.label}${active ? ", selected" : ", double-tap to select"}`);
+  });
   document.querySelectorAll("[data-action='set-theme']").forEach((control) => {
     const active = control.dataset.theme === state.settings.theme;
     control.classList.toggle("is-active", active);
     control.setAttribute("aria-checked", active ? "true" : "false");
   });
+  document.querySelectorAll(".settings-control-hint").forEach((label) => { label.textContent = themeLabel(); });
+  document.querySelectorAll(".reading-preview-card__heading > span").forEach((label) => { label.textContent = themeLabel(); });
   document.querySelectorAll("[data-setting-size]").forEach((label) => {
     label.textContent = `${state.settings.fontSize}px`;
   });
@@ -292,7 +335,7 @@ async function persistSettings() {
   applySettings();
   syncPreferenceControls();
   await storage.set(KEYS.settings, state.settings);
-  log("settings.updated", state.settings);
+  queueSettingsLog();
 }
 
 function queueFontSizePreview(value) {
@@ -566,6 +609,16 @@ function eventLogMarkup() {
   return groups.map((group) => `<section class="log-group" aria-labelledby="log-group-${group.label.toLowerCase()}"><h3 id="log-group-${group.label.toLowerCase()}">${group.label}</h3>${group.entries.map((entry) => `<article class="log-row"><time datetime="${escapeHtml(entry.time)}">${escapeHtml(relativeTime(entry.time))}<small>${escapeHtml(formatClock(entry.time))}</small></time><div><strong>${escapeHtml(logEventLabel(entry.event))}</strong><p>${escapeHtml(logEventDetails(entry))}</p></div></article>`).join("")}</section>`).join("");
 }
 
+function refreshDiagnosticsOnly() {
+  const content = document.querySelector("#diagnostics-content");
+  if (!content) return;
+  const status = content.querySelector(".debug-status-card small");
+  if (status) status.textContent = `All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.`;
+  const feed = content.querySelector(".log-feed");
+  if (!feed) return;
+  feed.innerHTML = `<div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><button class="log-clear-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear log</button></div>${eventLogMarkup()}`;
+}
+
 function settingsPreviewMarkup() {
   const selectedFont = FONTS.find((font) => font.id === state.settings.font) || FONTS[0];
   return `<section class="reading-preview-card" aria-labelledby="reading-preview-title"><div class="reading-preview-card__heading"><div><p>Live preview</p><h2 id="reading-preview-title">A quiet page.</h2></div><span>${escapeHtml(themeLabel())}</span></div><p class="reading-preview-card__sample" data-reading-preview style="font-family:${selectedFont.family};font-size:${state.settings.fontSize}px">The quick brown fox jumps over the lazy dog. Typography is the craft of endowing human language with a durable visual form.</p></section>`;
@@ -659,21 +712,36 @@ function render() {
   const root = document.querySelector("#root");
   const transition = state.viewTransition;
   state.viewTransition = "";
-  const shellClass = transition ? ` app-shell--view-${transition}` : "";
-  root.innerHTML = `<div class="app-shell${shellClass}">${state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
-  applySettings();
-  if (transition) {
-    const nextShell = root.querySelector(".app-shell");
-    window.setTimeout(() => nextShell?.classList.remove(`app-shell--view-${transition}`), reducedMotionPreferred() ? 0 : 420);
-  }
-  if (state.article) requestAnimationFrame(() => {
-    const surface = document.querySelector(".reader-scroll-surface");
-    if (surface) {
-      surface.scrollTop = state.articleScrollTop;
-      readerLastScrollTop = state.articleScrollTop;
-      syncReaderToolbar();
+  const useNativeViewTransition = Boolean(transition && document.startViewTransition && !reducedMotionPreferred());
+  const update = () => {
+    const shellClass = transition && !useNativeViewTransition ? ` app-shell--view-${transition}` : "";
+    root.innerHTML = `<div class="app-shell${shellClass}">${state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
+    applySettings();
+    if (transition) {
+      const nextShell = root.querySelector(".app-shell");
+      window.setTimeout(() => nextShell?.classList.remove(`app-shell--view-${transition}`), reducedMotionPreferred() ? 0 : 420);
     }
-  });
+    if (state.article) requestAnimationFrame(() => {
+      const surface = document.querySelector(".reader-scroll-surface");
+      if (surface) {
+        surface.scrollTop = state.articleScrollTop;
+        readerLastScrollTop = state.articleScrollTop;
+        syncReaderToolbar();
+      }
+    });
+  };
+  if (useNativeViewTransition) {
+    document.documentElement.dataset.viewTransition = transition;
+    try {
+      const viewTransition = document.startViewTransition(update);
+      void viewTransition.finished.finally(() => { delete document.documentElement.dataset.viewTransition; });
+      return;
+    } catch {
+      delete document.documentElement.dataset.viewTransition;
+      // Fall back to the normal synchronous update on unsupported WebViews.
+    }
+  }
+  update();
 }
 
 async function handleExtractUrl(url) {
@@ -875,7 +943,8 @@ async function handleAction(target) {
     state.diagnosticsOpen = false;
     state.confirmClear = false;
     readerLastScrollTop = 0;
-    log("settings.opened", "User opened settings");
+    log("settings.opened", "User opened settings", { refreshDebug: false });
+    render();
     return;
   }
   if (action === "open-capture") {
@@ -958,6 +1027,7 @@ async function handleAction(target) {
   }
   if (action === "set-font") {
     const selectedFont = FONTS.find((font) => font.id === target.dataset.font) || FONTS[0];
+    if (selectedFont.id === state.settings.font || !beginSettingsInteraction()) return;
     state.settings.font = selectedFont.id;
     state.settings.readerLineHeight = selectedFont.bodyLineHeight;
     state.settings.readerTitleLineHeight = selectedFont.titleLineHeight;
@@ -968,16 +1038,22 @@ async function handleAction(target) {
     return;
   }
   if (action === "change-size") {
-    state.settings.fontSize = Math.min(24, Math.max(14, state.settings.fontSize + Number(target.dataset.delta)));
+    if (!beginSettingsInteraction()) return;
+    const nextSize = Math.min(24, Math.max(14, state.settings.fontSize + Number(target.dataset.delta)));
+    if (nextSize === state.settings.fontSize) return;
+    state.settings.fontSize = nextSize;
     await persistSettings();
     return;
   }
   if (action === "set-theme") {
-    state.settings.theme = ["system", "light", "dark", "sepia"].includes(target.dataset.theme) ? target.dataset.theme : "light";
+    const nextTheme = ["system", "light", "dark", "sepia"].includes(target.dataset.theme) ? target.dataset.theme : "light";
+    if (nextTheme === state.settings.theme || !beginSettingsInteraction()) return;
+    state.settings.theme = nextTheme;
     await persistSettings();
     return;
   }
   if (action === "toggle-theme") {
+    if (!beginSettingsInteraction()) return;
     state.settings.theme = nextThemePreference();
     await persistSettings();
     return;
@@ -1189,7 +1265,7 @@ async function init() {
   state.settings = normalizeSettings(savedSettings);
   state.collections = Array.isArray(savedCollections) ? savedCollections.filter((item) => item?.id && item.id !== "inbox" && item.name?.trim()).map((item) => ({ id: item.id, name: item.name.trim().slice(0, 60) })) : [];
   await storage.set(KEYS.collections, state.collections);
-  state.logs = Array.isArray(savedLogs) ? savedLogs.slice(0, LIMITS.logs) : [];
+  state.logs = Array.isArray(savedLogs) ? savedLogs.filter((entry) => entry?.event !== "status-bar.state").slice(0, LIMITS.logs) : [];
   await migrateLegacyArticles(Array.isArray(legacyArticles) ? legacyArticles : [], log);
   state.articles = await listArticles();
   log("app.ready", `${Capacitor.getPlatform()} · ${Capacitor.isNativePlatform() ? "native HTTP ready" : "web preview"}`);
