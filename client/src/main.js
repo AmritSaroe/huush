@@ -20,13 +20,33 @@ globalThis.Readability = Readability;
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs", collections: "whitemint:collections" };
 const LIMITS = { logs: 160 };
-const DEFAULT_SETTINGS = { theme: "light", font: "source-serif", fontSize: 18 };
+const DEFAULT_SETTINGS = { theme: "light", font: "inter", fontSize: 18, readerLineHeight: 1.6, readerTitleLineHeight: 1.2 };
 const FONTS = [
-  { id: "sans", label: "Inter", family: "var(--font-sans)" },
-  { id: "nunito", label: "Nunito", family: "var(--font-nunito)" },
-  { id: "merriweather", label: "Merriweather", family: "var(--font-serif)" },
-  { id: "source-serif", label: "Source Serif 4", family: "var(--font-serif-3)" },
+  { id: "inter", label: "Inter", family: "var(--font-reading-inter)", bodyLineHeight: 1.6, titleLineHeight: 1.2, serif: false },
+  { id: "source-serif-4", label: "Source Serif 4", family: "var(--font-reading-source-serif-4)", bodyLineHeight: 1.7, titleLineHeight: 1.25, serif: true },
+  { id: "merriweather", label: "Merriweather", family: "var(--font-reading-merriweather)", bodyLineHeight: 1.75, titleLineHeight: 1.3, serif: true },
+  { id: "literata", label: "Literata", family: "var(--font-reading-literata)", bodyLineHeight: 1.7, titleLineHeight: 1.25, serif: true },
 ];
+const LEGACY_FONT_IDS = { sans: "inter", "source-serif": "source-serif-4" };
+const fontLoadPromises = new Map();
+
+function fontFamilyName(fontId) {
+  return { inter: "Inter", "source-serif-4": "Source Serif 4", merriweather: "Merriweather", literata: "Literata" }[fontId] || "Inter";
+}
+
+function ensureFontLoaded(fontId, weight = 400, style = "normal") {
+  if (!document.fonts?.load) return Promise.resolve();
+  const key = `${fontId}:${weight}:${style}`;
+  if (!fontLoadPromises.has(key)) {
+    const family = fontFamilyName(fontId);
+    fontLoadPromises.set(key, document.fonts.load(`${style} ${weight} 16px "${family}"`).catch(() => []));
+  }
+  return fontLoadPromises.get(key);
+}
+
+function ensureFontPickerFontsLoaded() {
+  return Promise.all(FONTS.filter((font) => font.serif).flatMap((font) => [ensureFontLoaded(font.id), ensureFontLoaded(font.id, 600), ensureFontLoaded(font.id, 400, "italic")]));
+}
 
 const state = {
   activeTab: "library",
@@ -63,12 +83,16 @@ let readerLastScrollTop = 0;
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
   const preferredSize = Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
+  const fontId = LEGACY_FONT_IDS[saved.font] || saved.font;
+  const selectedFont = FONTS.find((font) => font.id === fontId) || FONTS[0];
   return {
     ...DEFAULT_SETTINGS,
     ...saved,
-    font: FONTS.some((font) => font.id === saved.font) ? saved.font : DEFAULT_SETTINGS.font,
+    font: selectedFont.id,
     theme: ["system", "light", "dark", "sepia"].includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
     fontSize: Math.min(24, Math.max(14, Math.round(preferredSize))),
+    readerLineHeight: Number.isFinite(Number(saved.readerLineHeight)) ? Number(saved.readerLineHeight) : selectedFont.bodyLineHeight,
+    readerTitleLineHeight: Number.isFinite(Number(saved.readerTitleLineHeight)) ? Number(saved.readerTitleLineHeight) : selectedFont.titleLineHeight,
   };
 }
 
@@ -206,15 +230,21 @@ function applySettings() {
   const theme = effectiveTheme();
   root.dataset.theme = theme;
   root.dataset.themePreference = state.settings.theme;
+  root.dataset.readingFont = state.settings.font;
   root.dataset.nativePlatform = Capacitor.isNativePlatform() ? "true" : "false";
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
+  root.style.setProperty("--reader-line-height", String(state.settings.readerLineHeight || 1.6));
+  root.style.setProperty("--reader-title-line-height", String(state.settings.readerTitleLineHeight || 1.2));
   const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[theme] || "#FAFAF8";
   root.style.setProperty("--wm-system-bar-color", themeColor);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   root.classList.toggle("dark", theme === "dark");
   root.classList.toggle("sepia", theme === "sepia");
   const article = document.querySelector(".article-reading");
-  if (article) article.dataset.font = state.settings.font;
+  if (article) {
+    article.dataset.font = state.settings.font;
+    article.dataset.readingFont = state.settings.font;
+  }
   void syncNativeStatusBar();
 }
 
@@ -786,6 +816,7 @@ async function handleAction(target) {
   }
   if (action === "show-settings" || action === "show-debug") {
     invalidateSmryRequest();
+    void ensureFontPickerFontsLoaded();
     state.activeTab = "settings";
     state.article = null;
     state.captureOpen = false;
@@ -868,6 +899,7 @@ async function handleAction(target) {
   if (action === "open-settings") {
     state.focusMode = false;
     state.settingsOpen = true;
+    void ensureFontPickerFontsLoaded();
     render();
     return;
   }
@@ -877,7 +909,11 @@ async function handleAction(target) {
     return;
   }
   if (action === "set-font") {
-    state.settings.font = target.dataset.font;
+    const selectedFont = FONTS.find((font) => font.id === target.dataset.font) || FONTS[0];
+    state.settings.font = selectedFont.id;
+    state.settings.readerLineHeight = selectedFont.bodyLineHeight;
+    state.settings.readerTitleLineHeight = selectedFont.titleLineHeight;
+    await ensureFontLoaded(selectedFont.id);
     await persistSettings();
     return;
   }
