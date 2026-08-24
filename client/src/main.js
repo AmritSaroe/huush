@@ -50,6 +50,8 @@ const state = {
   toast: null,
   pendingDelete: null,
   loggedImageUrls: new Set(),
+  diagnosticsOpen: false,
+  confirmClear: false,
 };
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
@@ -65,7 +67,7 @@ function normalizeSettings(saved = {}) {
     ...DEFAULT_SETTINGS,
     ...saved,
     font: FONTS.some((font) => font.id === saved.font) ? saved.font : DEFAULT_SETTINGS.font,
-    theme: ["light", "dark", "sepia"].includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
+    theme: ["system", "light", "dark", "sepia"].includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
     fontSize: Math.min(24, Math.max(14, Math.round(preferredSize))),
   };
 }
@@ -167,12 +169,13 @@ async function syncNativeStatusBar() {
       await StatusBar.setOverlaysWebView({ overlay: false });
       nativeStatusBarConfigured = true;
     }
-    const style = state.settings.theme === "dark" ? Style.Dark : Style.Light;
+    const theme = effectiveTheme();
+    const style = theme === "dark" ? Style.Dark : Style.Light;
     if (nativeStatusBarStyle !== style) {
       await StatusBar.setStyle({ style });
       nativeStatusBarStyle = style;
     }
-    const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[state.settings.theme] || "#FAFAF8";
+    const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[theme] || "#FAFAF8";
     if (nativeStatusBarColor !== themeColor) {
       await StatusBar.setBackgroundColor({ color: themeColor });
       nativeStatusBarColor = themeColor;
@@ -184,16 +187,32 @@ async function syncNativeStatusBar() {
   }
 }
 
+function effectiveTheme() {
+  if (state.settings.theme !== "system") return state.settings.theme;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function themeLabel(theme = state.settings.theme) {
+  return theme === "system" ? `System (${effectiveTheme() === "dark" ? "dark" : "light"})` : theme[0].toUpperCase() + theme.slice(1);
+}
+
+function nextThemePreference() {
+  const cycle = ["light", "dark", "sepia", "system"];
+  return cycle[(cycle.indexOf(state.settings.theme) + 1) % cycle.length] || "light";
+}
+
 function applySettings() {
   const root = document.documentElement;
-  root.dataset.theme = state.settings.theme;
+  const theme = effectiveTheme();
+  root.dataset.theme = theme;
+  root.dataset.themePreference = state.settings.theme;
   root.dataset.nativePlatform = Capacitor.isNativePlatform() ? "true" : "false";
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
-  const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[state.settings.theme] || "#FAFAF8";
+  const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[theme] || "#FAFAF8";
   root.style.setProperty("--wm-system-bar-color", themeColor);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
-  root.classList.toggle("dark", state.settings.theme === "dark");
-  root.classList.toggle("sepia", state.settings.theme === "sepia");
+  root.classList.toggle("dark", theme === "dark");
+  root.classList.toggle("sepia", theme === "sepia");
   const article = document.querySelector(".article-reading");
   if (article) article.dataset.font = state.settings.font;
   void syncNativeStatusBar();
@@ -201,12 +220,34 @@ function applySettings() {
 
 function syncPreferenceControls() {
   document.querySelectorAll("[data-action='set-font']").forEach((control) => control.classList.toggle("is-active", control.dataset.font === state.settings.font));
-  document.querySelectorAll("[data-action='set-theme']").forEach((control) => control.classList.toggle("is-active", control.dataset.theme === state.settings.theme));
+  document.querySelectorAll("[data-action='set-theme']").forEach((control) => {
+    const active = control.dataset.theme === state.settings.theme;
+    control.classList.toggle("is-active", active);
+    control.setAttribute("aria-checked", active ? "true" : "false");
+  });
   document.querySelectorAll("[data-setting-size]").forEach((label) => {
     label.textContent = `${state.settings.fontSize}px`;
   });
+  document.querySelectorAll("[data-size-default]").forEach((label) => {
+    label.hidden = state.settings.fontSize !== DEFAULT_SETTINGS.fontSize;
+  });
+  document.querySelectorAll(".font-size-ticks span").forEach((tick) => {
+    tick.classList.toggle("is-current", Number(tick.textContent) === state.settings.fontSize);
+  });
+  document.querySelectorAll("[data-size-decrement]").forEach((control) => { control.disabled = state.settings.fontSize <= 14; });
+  document.querySelectorAll("[data-size-increment]").forEach((control) => { control.disabled = state.settings.fontSize >= 24; });
   const range = document.querySelector("[data-font-size-range]");
-  if (range) range.value = String(state.settings.fontSize);
+  if (range) {
+    range.value = String(state.settings.fontSize);
+    range.setAttribute("aria-valuetext", `${state.settings.fontSize} pixels${state.settings.fontSize === DEFAULT_SETTINGS.fontSize ? ", default" : ""}`);
+  }
+  const preview = document.querySelector("[data-reading-preview]");
+  const selectedFont = FONTS.find((font) => font.id === state.settings.font) || FONTS[0];
+  if (preview) {
+    preview.style.fontFamily = selectedFont.family;
+    preview.style.fontSize = `${state.settings.fontSize}px`;
+    preview.dataset.previewTheme = effectiveTheme();
+  }
 }
 
 async function persistSettings() {
@@ -400,9 +441,82 @@ function captureMarkup() {
   return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. huush fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
 }
 
+function relativeTime(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return "Unknown time";
+  const seconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (seconds < 60) return "Just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
+  if (seconds < 172800) return "Yesterday";
+  return formatDate(value);
+}
+
+function logEventLabel(event = "") {
+  return {
+    "status-bar.state": "Status bar updated",
+    "settings.opened": "Settings opened",
+    "settings.updated": "Reading preferences updated",
+    "article.saved": "Article saved",
+    "article.opened": "Article opened",
+    "article.image.loaded": "Article image loaded",
+    "fetch.transport": "Article fetch started",
+    "fetch.smry.succeeded": "Backup extraction completed",
+    "fetch.smry.started": "Backup extraction started",
+    "fetch.failed": "Article fetch failed",
+    "source.copied": "Source link copied",
+    "debug.copied": "Debug information exported",
+  }[event] || event.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function logEventDetails(entry) {
+  const raw = String(entry.detail || "").trim();
+  if (!raw) return "No additional details";
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return Object.entries(parsed).map(([key, value]) => `${key.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}: ${typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}`).join(" · ");
+    }
+  } catch {
+    // Plain-text event details are already suitable for display.
+  }
+  return raw;
+}
+
+function logGroupLabel(value) {
+  const date = new Date(value);
+  const now = new Date();
+  const start = (item) => new Date(item.getFullYear(), item.getMonth(), item.getDate()).getTime();
+  const difference = Math.round((start(now) - start(date)) / 86400000);
+  return difference === 0 ? "Today" : difference === 1 ? "Yesterday" : "Earlier";
+}
+
+function eventLogMarkup() {
+  if (!state.logs.length) return '<p class="log-empty">No events yet. Saving a reading will start the log.</p>';
+  const groups = ["Today", "Yesterday", "Earlier"].map((label) => ({ label, entries: state.logs.filter((entry) => logGroupLabel(entry.time) === label) })).filter((group) => group.entries.length);
+  return groups.map((group) => `<section class="log-group" aria-labelledby="log-group-${group.label.toLowerCase()}"><h3 id="log-group-${group.label.toLowerCase()}">${group.label}</h3>${group.entries.map((entry) => `<article class="log-row"><time datetime="${escapeHtml(entry.time)}">${escapeHtml(relativeTime(entry.time))}<small>${escapeHtml(formatClock(entry.time))}</small></time><div><strong>${escapeHtml(logEventLabel(entry.event))}</strong><p>${escapeHtml(logEventDetails(entry))}</p></div></article>`).join("")}</section>`).join("");
+}
+
+function settingsPreviewMarkup() {
+  const selectedFont = FONTS.find((font) => font.id === state.settings.font) || FONTS[0];
+  return `<section class="reading-preview-card" aria-labelledby="reading-preview-title"><div class="reading-preview-card__heading"><div><p>Live preview</p><h2 id="reading-preview-title">A quiet page.</h2></div><span>${escapeHtml(themeLabel())}</span></div><p class="reading-preview-card__sample" data-reading-preview style="font-family:${selectedFont.family};font-size:${state.settings.fontSize}px">The quick brown fox jumps over the lazy dog. Typography is the craft of endowing human language with a durable visual form.</p></section>`;
+}
+
+function clearDataConfirmMarkup() {
+  return `<div class="confirm-backdrop" data-action="cancel-clear-data" aria-hidden="true"></div><section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-data-title"><div class="confirm-dialog__icon">${icon("trash", 22)}</div><h2 id="clear-data-title">Clear local library?</h2><p>This will remove all saved articles from this device. They will remain in your cloud account if sync is enabled.</p><div class="confirm-dialog__actions"><button data-action="cancel-clear-data">Cancel</button><button class="is-destructive" data-action="confirm-clear-data">Clear library</button></div></section>`;
+}
+
+function sizeControlMarkup() {
+  return `<div class="setting-label-row"><p class="setting-label">Text size</p><span class="setting-size-value" data-setting-size>${state.settings.fontSize}px</span><span class="setting-default-label" data-size-default ${state.settings.fontSize === DEFAULT_SETTINGS.fontSize ? "" : "hidden"}>Default</span></div><div class="font-size-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" data-size-decrement aria-label="Decrease text size">−</button><div class="font-size-slider"><span aria-hidden="true">A</span><input data-font-size-range type="range" min="14" max="24" step="1" value="${state.settings.fontSize}" aria-label="Text size" aria-valuetext="${state.settings.fontSize} pixels" /><span class="font-size-slider__large" aria-hidden="true">A</span></div><button class="type-scale-button" data-action="change-size" data-delta="1" data-size-increment aria-label="Increase text size">+</button></div><div class="font-size-ticks" aria-hidden="true">${[14,16,18,20,22,24].map((size) => `<span class="${size === state.settings.fontSize ? "is-current" : ""}">${size}</span>`).join("")}</div>`;
+}
+
+function themeOptionsMarkup() {
+  const options = [{ id: "system", label: "System", iconName: "settings" }, { id: "light", label: "Light", iconName: "sun" }, { id: "dark", label: "Dark", iconName: "moon" }, { id: "sepia", label: "Sepia", iconName: "book" }];
+  return options.map((option) => `<button class="theme-choice ${state.settings.theme === option.id ? "is-active" : ""}" data-action="set-theme" data-theme="${option.id}" role="radio" aria-checked="${state.settings.theme === option.id}" aria-label="${option.label} theme"><span class="theme-preview theme-preview--${option.id}">${icon(option.iconName, 16)}</span><span>${option.label}</span><i class="theme-choice__radio" aria-hidden="true"></i></button>`).join("");
+}
+
 function settingsPageMarkup() {
-  const nativeStatus = Capacitor.isNativePlatform() ? "Native Android transport" : "Browser preview";
-  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<button class="topbar-action" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear</button></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-inline-controls" aria-label="Reading settings"><div class="settings-inline-group"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-inline-group"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="font-size-slider"><span aria-hidden="true">A</span><input data-font-size-range type="range" min="14" max="24" step="1" value="${state.settings.fontSize}" aria-label="Reading size" /><span class="font-size-slider__large" aria-hidden="true">A</span></div></div><div class="settings-inline-group"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button><button class="theme-choice ${state.settings.theme === "sepia" ? "is-active" : ""}" data-action="set-theme" data-theme="sepia"><span class="theme-swatch theme-swatch--sepia"></span><span>Sepia</span></button></div></div></section><section class="settings-diagnostics"><div class="settings-diagnostics__heading"><p>Diagnostics</p><h2>System activity</h2></div><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>${escapeHtml(nativeStatus)}</strong><small>${state.articles.length} saved articles · ${state.logs.length} events</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Copy diagnostic log</strong><small>Paste it here whenever something feels off.</small></span>${icon("chevron", 18)}</button><button class="settings-clear-button" data-action="clear-data">Clear local library</button><section class="log-feed" aria-live="polite"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><span>${state.logs.length}</span></div>${state.logs.length ? state.logs.map((entry) => `<article class="log-row"><time>${formatClock(entry.time)}</time><div><strong>${escapeHtml(entry.event)}</strong><p>${escapeHtml(entry.detail || "—")}</p></div></article>`).join("") : "<p class=\"log-empty\">No events yet. Saving a reading will start the log.</p>"}</section></main>${bottomNavigationMarkup()}`;
+  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<span class="topbar-spacer" aria-hidden="true"></span></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-section-block settings-reading" aria-labelledby="reading-settings-title"><div class="settings-section-heading"><p>Reading</p><h2 id="reading-settings-title">Make it yours.</h2></div>${settingsPreviewMarkup()}<div class="settings-control-group"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-control-group">${sizeControlMarkup()}</div><div class="settings-control-group"><div class="settings-control-heading"><p class="setting-label">Theme</p><span class="settings-control-hint">${escapeHtml(themeLabel())}</span></div><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section><section class="settings-section-block settings-general" aria-labelledby="general-settings-title"><div class="settings-section-heading"><p>General</p><h2 id="general-settings-title">A little housekeeping.</h2></div><div class="settings-info-list"><div class="settings-info-row"><span class="settings-info-row__icon">${icon("archive", 19)}</span><span><strong>Storage</strong><small>${state.articles.length} ${state.articles.length === 1 ? "article" : "articles"} saved privately on this device.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("settings", 19)}</span><span><strong>Notifications</strong><small>Not configured. Huush stays quiet until you ask it to.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("chevron", 19)}</span><span><strong>Advanced</strong><small>Technical activity is tucked away below.</small></span></div></div><button class="settings-clear-button settings-clear-button--destructive" data-action="clear-data">Clear local library</button></section><section class="settings-section-block settings-diagnostics" aria-labelledby="diagnostics-title"><button class="settings-disclosure" data-action="toggle-diagnostics" aria-expanded="${state.diagnosticsOpen ? "true" : "false"}" aria-controls="diagnostics-content"><span><p>Diagnostics</p><strong id="diagnostics-title">System activity</strong></span><span class="settings-disclosure__chevron ${state.diagnosticsOpen ? "is-open" : ""}">${icon("chevron", 19)}</span></button>${state.diagnosticsOpen ? `<div id="diagnostics-content" class="settings-diagnostics__content"><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>Sync status</strong><small>All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Share debug info</strong><small>Export readable technical details when something feels off.</small></span>${icon("chevron", 18)}</button><section class="log-feed" aria-live="polite"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><button class="log-clear-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear log</button></div>${eventLogMarkup()}</section></div>` : ""}</section></main>${bottomNavigationMarkup()}${state.confirmClear ? clearDataConfirmMarkup() : ""}`;
 }
 
 function articleContentMarkup(content = "", baseUrl = "") {
@@ -455,16 +569,16 @@ function readerMarkup() {
   if (!article) return libraryMarkup();
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
   const content = articleContentMarkup(article.content, article.url);
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><div class="reader-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.articleProgress}" style="--progress:${state.articleProgress}%"></div><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool reader-tool--font" data-action="open-settings" aria-label="Reading settings"><span aria-hidden="true">Aa</span></button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><div class="reader-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.articleProgress}" style="--progress:${state.articleProgress}%"></div><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Switch to ${nextThemePreference()} theme">${icon(effectiveTheme() === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool reader-tool--font" data-action="open-settings" aria-label="Reading settings"><span aria-hidden="true">Aa</span></button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
-  return FONTS.map((font) => `<button class="font-chip ${state.settings.font === font.id ? "is-active" : ""}" data-action="set-font" data-font="${font.id}" style="--choice-font:${font.family}"><span>Aa</span><small>${font.label}</small></button>`).join("");
+  return FONTS.map((font) => `<button class="font-chip ${state.settings.font === font.id ? "is-active" : ""}" data-action="set-font" data-font="${font.id}" style="--choice-font:${font.family}" role="radio" aria-checked="${state.settings.font === font.id}" aria-label="${font.label}${state.settings.font === font.id ? ", selected" : ", double-tap to select"}"><span>Aa</span><small>${font.label}</small><i class="font-chip__check" aria-hidden="true">✓</i></button>`).join("");
 }
 
 function settingsMarkup() {
   if (!state.settingsOpen) return "";
-  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Set the pace.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header><div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-section"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="font-size-slider"><span aria-hidden="true">A</span><input data-font-size-range type="range" min="14" max="24" step="1" value="${state.settings.fontSize}" aria-label="Reading size" /><span class="font-size-slider__large" aria-hidden="true">A</span></div></div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button><button class="theme-choice ${state.settings.theme === "sepia" ? "is-active" : ""}" data-action="set-theme" data-theme="sepia"><span class="theme-swatch theme-swatch--sepia"></span><span>Sepia</span></button></div></div></section>`;
+  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Set the pace.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header>${settingsPreviewMarkup()}<div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-section">${sizeControlMarkup(true)}</div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section>`;
 }
 
 function toastMarkup() {
@@ -678,6 +792,8 @@ async function handleAction(target) {
     state.settingsOpen = false;
     state.focusMode = false;
     state.readerToolbarHidden = false;
+    state.diagnosticsOpen = false;
+    state.confirmClear = false;
     readerLastScrollTop = 0;
     log("settings.opened", "User opened settings");
     return;
@@ -725,7 +841,17 @@ async function handleAction(target) {
     return;
   }
   if (action === "clear-data") {
-    if (!window.confirm("Clear all saved articles, collections, and diagnostics from this device?")) return;
+    state.confirmClear = true;
+    render();
+    return;
+  }
+  if (action === "cancel-clear-data") {
+    state.confirmClear = false;
+    render();
+    return;
+  }
+  if (action === "confirm-clear-data") {
+    state.confirmClear = false;
     await Promise.all(state.articles.map((article) => removeArticle(article.id)));
     state.articles = [];
     state.collections = [];
@@ -761,13 +887,18 @@ async function handleAction(target) {
     return;
   }
   if (action === "set-theme") {
-    state.settings.theme = target.dataset.theme;
+    state.settings.theme = ["system", "light", "dark", "sepia"].includes(target.dataset.theme) ? target.dataset.theme : "light";
     await persistSettings();
     return;
   }
   if (action === "toggle-theme") {
-    state.settings.theme = state.settings.theme === "light" ? "dark" : state.settings.theme === "dark" ? "sepia" : "light";
+    state.settings.theme = nextThemePreference();
     await persistSettings();
+    return;
+  }
+  if (action === "toggle-diagnostics") {
+    state.diagnosticsOpen = !state.diagnosticsOpen;
+    render();
     return;
   }
   if (action === "retry-smry") {
@@ -799,7 +930,7 @@ async function handleAction(target) {
   if (action === "clear-logs") {
     state.logs = [];
     await storage.set(KEYS.logs, []);
-    showToast("Diagnostic log cleared.");
+    showToast("Event log cleared.");
     return;
   }
   if (action === "dismiss-toast") {
@@ -826,6 +957,15 @@ document.addEventListener("focusin", (event) => {
 window.visualViewport?.addEventListener("resize", () => {
   const field = document.activeElement;
   if (field instanceof HTMLInputElement && field.matches("#article-url, [data-collection-name], [data-rename-collection]")) keepFocusedFieldVisible(field);
+});
+
+const colorSchemeQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+colorSchemeQuery?.addEventListener?.("change", () => {
+  if (state.settings.theme === "system") {
+    applySettings();
+    syncPreferenceControls();
+    if (state.activeTab === "settings" && !state.article) render();
+  }
 });
 
 document.addEventListener("submit", (event) => {
