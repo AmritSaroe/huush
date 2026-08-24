@@ -307,7 +307,7 @@ function articleContentMarkup(content = "", baseUrl = "") {
   const root = template.content;
   const contentNodes = [...root.querySelectorAll("p,h2,h3,h4,blockquote,ol,ul,pre,table")]
     .filter((node) => stripHtml(node.textContent || ""));
-  const contextLabels = new Set(["synopsis", "credits", "summary", "in brief", "key points", "standfirst"]);
+  const contextLabels = new Set(["synopsis", "credits", "summary", "in brief", "key points", "standfirst", "story so far"]);
 
   const contextGroup = contentNodes
     .slice(0, 8)
