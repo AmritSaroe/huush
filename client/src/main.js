@@ -93,7 +93,8 @@ let settingsInteractionUnlockTimeout = 0;
 let settingsInteractionLocked = false;
 let readerLastScrollTop = 0;
 let fontSizeUpdateFrame = 0;
-let fontSizePersistTimeout = 0;
+let lastPersistedFontSize = DEFAULT_SETTINGS.fontSize;
+let sliderInteractionDirty = false;
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
   const preferredSize = Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
@@ -335,18 +336,18 @@ async function persistSettings() {
   applySettings();
   syncPreferenceControls();
   await storage.set(KEYS.settings, state.settings);
+  lastPersistedFontSize = state.settings.fontSize;
   queueSettingsLog();
 }
 
 function queueFontSizePreview(value) {
+  sliderInteractionDirty = true;
   state.settings.fontSize = Math.min(24, Math.max(14, Number(value)));
   window.cancelAnimationFrame(fontSizeUpdateFrame);
   fontSizeUpdateFrame = window.requestAnimationFrame(() => {
     applySettings();
     syncPreferenceControls();
   });
-  window.clearTimeout(fontSizePersistTimeout);
-  fontSizePersistTimeout = window.setTimeout(() => void persistSettings(), 90);
 }
 
 function setViewTransition(direction = "forward") {
@@ -1158,7 +1159,15 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", (event) => {
   if (event.target instanceof HTMLInputElement && event.target.matches("[data-font-size-range]")) {
-    window.clearTimeout(fontSizePersistTimeout);
+    const nextSize = Math.min(24, Math.max(14, Number(event.target.value)));
+    const wasDragged = sliderInteractionDirty;
+    sliderInteractionDirty = false;
+    state.settings.fontSize = nextSize;
+    if (!wasDragged) {
+      applySettings();
+      syncPreferenceControls();
+      return;
+    }
     void persistSettings();
   }
 });
@@ -1263,6 +1272,7 @@ async function setupNativeBackHandling() {
 async function init() {
   const [legacyArticles, savedSettings, savedLogs, savedCollections] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get(KEYS.logs, []), storage.get(KEYS.collections, [])]);
   state.settings = normalizeSettings(savedSettings);
+  lastPersistedFontSize = state.settings.fontSize;
   state.collections = Array.isArray(savedCollections) ? savedCollections.filter((item) => item?.id && item.id !== "inbox" && item.name?.trim()).map((item) => ({ id: item.id, name: item.name.trim().slice(0, 60) })) : [];
   await storage.set(KEYS.collections, state.collections);
   state.logs = Array.isArray(savedLogs) ? savedLogs.filter((entry) => entry?.event !== "status-bar.state").slice(0, LIMITS.logs) : [];
