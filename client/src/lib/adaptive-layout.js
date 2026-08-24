@@ -43,7 +43,7 @@ function setViewportState() {
   root.style.setProperty("--wm-viewport-height", `${height}px`);
   root.style.setProperty("--wm-viewport-inline", `${Math.max(width, height)}px`);
   root.style.setProperty("--wm-viewport-block", `${Math.min(width, height)}px`);
-  root.style.setProperty("--wm-keyboard-inset", `${keyboardInset}px`);
+  root.style.setProperty("--wm-visual-keyboard-inset", `${keyboardInset}px`);
 }
 
 export function initAdaptiveLayout() {

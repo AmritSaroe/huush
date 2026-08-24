@@ -449,3 +449,25 @@ html[data-window-height="compact"][data-orientation="landscape"] .article-readin
   .capture__form--sheet .capture__submit{width:52px;height:52px;flex-basis:52px;}
   .capture__form--sheet input{height:52px;font-size:15px;}
 }
+
+/* Final mobile Add article sheet: prioritize the form over the keyboard, not the bottom edge. */
+:root{
+  --wm-visual-keyboard-inset:0px;
+  --wm-native-keyboard-inset:0px;
+  --wm-keyboard-inset:max(var(--wm-visual-keyboard-inset),var(--wm-native-keyboard-inset));
+}
+.capture-sheet{scroll-padding-block-start:12px;scroll-padding-block-end:calc(24px + var(--wm-keyboard-inset));}
+@media (max-width:599px){
+  .capture-sheet{top:auto;bottom:var(--wm-keyboard-inset);max-height:calc(100dvh - var(--wm-safe-top) - var(--wm-keyboard-inset) - 8px);padding-top:8px;padding-bottom:calc(16px + var(--wm-safe-bottom));border-radius:22px 22px 0 0;}
+  .capture-sheet .sheet-handle{margin-bottom:13px;}
+  .capture-sheet__header{padding-bottom:14px;}
+  .capture-sheet__header h2{font-size:clamp(27px,8vw,33px);}
+  .capture-sheet__intro{max-width:none;margin:16px 0 14px;font-size:14px;line-height:1.4;}
+  .capture__form--sheet{position:relative;z-index:1;}
+  .capture-sheet__note{margin-top:10px;font-size:12px;line-height:1.35;}
+}
+@media (max-width:340px){
+  .capture-sheet{top:auto;}
+  .capture-sheet__intro{margin-top:13px;margin-bottom:12px;font-size:13px;}
+  .capture-sheet__note{font-size:11px;}
+}

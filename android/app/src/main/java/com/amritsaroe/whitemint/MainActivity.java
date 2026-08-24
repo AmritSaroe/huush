@@ -38,6 +38,8 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(webView, (view, insets) -> {
             int insetTypes = WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout();
             androidx.core.graphics.Insets systemInsets = insets.getInsets(insetTypes);
+            androidx.core.graphics.Insets imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime());
+            int keyboardBottom = Math.max(0, imeInsets.bottom - systemInsets.bottom);
             DisplayMetrics metrics = getResources().getDisplayMetrics();
             float density = metrics.density > 0 ? metrics.density : 1f;
             String script = String.format(
@@ -45,11 +47,13 @@ public class MainActivity extends BridgeActivity {
                 "document.documentElement.style.setProperty('--wm-native-safe-top','%.2fpx');" +
                     "document.documentElement.style.setProperty('--wm-native-safe-right','%.2fpx');" +
                     "document.documentElement.style.setProperty('--wm-native-safe-bottom','%.2fpx');" +
-                    "document.documentElement.style.setProperty('--wm-native-safe-left','%.2fpx');",
+                    "document.documentElement.style.setProperty('--wm-native-safe-left','%.2fpx');" +
+                    "document.documentElement.style.setProperty('--wm-native-keyboard-inset','%.2fpx');",
                 systemInsets.top / density,
                 systemInsets.right / density,
                 systemInsets.bottom / density,
-                systemInsets.left / density
+                systemInsets.left / density,
+                keyboardBottom / density
             );
             getBridge().getWebView().evaluateJavascript(script, null);
             return insets;
