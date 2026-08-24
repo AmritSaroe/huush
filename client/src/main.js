@@ -795,7 +795,7 @@ function render() {
 
 async function handleExtractUrl(url) {
   const startedAt = performance.now();
-  log("article.save.start", { url, source: (() => { try { return new URL(url).hostname.replace(/^www\\./, ""); } catch { return "unknown"; } })() });
+  log("article.save.start", { url, source: (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "unknown"; } })() });
   let saveStage = "fetch";
   state.busy = true;
   render();
@@ -804,8 +804,8 @@ async function handleExtractUrl(url) {
     saveStage = "parse";
     const savedArticle = await saveArticle(article);
     saveStage = "store";
-    const imageCount = (article.content || "").match(/<img\\b/gi)?.length || 0;
-    log("article.save.success", { url, parseTimeMs: Math.round(performance.now() - startedAt), wordCount: String(article.textContent || stripHtml(article.content || "")).split(/\\s+/).filter(Boolean).length, imageCount });
+    const imageCount = (article.content || "").match(/<img\b/gi)?.length || 0;
+    log("article.save.success", { url, parseTimeMs: Math.round(performance.now() - startedAt), wordCount: String(article.textContent || stripHtml(article.content || "")).split(/\s+/).filter(Boolean).length, imageCount });
     state.article = savedArticle;
     state.collectionSheet = { type: "organize", articleId: savedArticle.id };
     state.articleScrollTop = 0;
