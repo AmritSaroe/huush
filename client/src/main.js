@@ -936,8 +936,22 @@ async function exportLogs() {
 function toggleDeveloperOptions() {
   state.developerOptionsEnabled = !state.developerOptionsEnabled;
   try { window.localStorage.setItem(STORAGE_FLAGS.developer, String(state.developerOptionsEnabled)); } catch { /* no-op */ }
-  if (state.developerOptionsEnabled) showToast("Developer options enabled.", "success");
-  else showToast("Developer options hidden.", "neutral");
+  if (!state.developerOptionsEnabled) {
+    const section = document.querySelector("#developer-options");
+    section?.classList.add("hidden");
+    if (section) section.style.display = "none";
+    showToastInPlace("Developer options hidden.", "neutral");
+    return;
+  }
+  const section = document.querySelector("#developer-options");
+  if (section) {
+    section.classList.remove("hidden");
+    section.style.removeProperty("display");
+    section.removeAttribute("aria-hidden");
+  } else {
+    document.querySelector(".settings-about")?.insertAdjacentHTML("afterend", developerOptionsMarkup());
+  }
+  showToastInPlace("Developer options enabled.", "success");
 }
 
 function resetReadingDefaults() {
@@ -1185,8 +1199,8 @@ async function handleAction(target) {
     if (now - lastVersionTapAt > 3000) versionTapCount = 0;
     versionTapCount += 1;
     lastVersionTapAt = now;
-    if (versionTapCount === 5) showToast("2 more taps to enable developer options.", "neutral");
-    if (versionTapCount >= 7) { versionTapCount = 0; toggleDeveloperOptions(); render(); }
+    if (versionTapCount === 5) showToastInPlace("2 more taps to enable developer options.", "neutral");
+    if (versionTapCount >= 7) { versionTapCount = 0; toggleDeveloperOptions(); }
     return;
   }
   if (action === "open-licenses") { showToast("Open-source notices are bundled with Huush.", "neutral"); return; }
