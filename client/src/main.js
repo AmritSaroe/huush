@@ -304,20 +304,45 @@ function debugMarkup() {
 function articleContentMarkup(content = "") {
   const template = document.createElement("template");
   template.innerHTML = content;
-  const synopsisHeading = [...template.content.querySelectorAll("h2,h3,h4")]
-    .find((node) => stripHtml(node.textContent || "").toLowerCase() === "synopsis");
-  const synopsisGroup = synopsisHeading?.parentElement;
-  const bodyGroup = synopsisGroup?.nextElementSibling;
-  if (!synopsisGroup || !bodyGroup || !bodyGroup.querySelector("p")) return content;
+  const root = template.content;
+  const contentNodes = [...root.querySelectorAll("p,h2,h3,h4,blockquote,ol,ul,pre,table")]
+    .filter((node) => stripHtml(node.textContent || ""));
+  const contextLabels = new Set(["synopsis", "credits", "summary", "in brief", "key points", "standfirst"]);
 
-  synopsisGroup.classList.add("article-reading__synopsis");
-  bodyGroup.classList.add("article-reading__body-content");
+  const contextGroup = contentNodes
+    .slice(0, 8)
+    .map((node) => {
+      const label = stripHtml(node.textContent || "").toLowerCase();
+      if (!contextLabels.has(label)) return null;
+      const group = node.closest("[role='group']") || node.parentElement;
+      if (!group || group === root || stripHtml(group.textContent || "").length > 1800) return null;
+      const supportingText = [...group.querySelectorAll("p")]
+        .filter((paragraph) => paragraph !== node)
+        .some((paragraph) => stripHtml(paragraph.textContent || "").length >= 20);
+      return supportingText ? group : null;
+    })
+    .find(Boolean);
+
+  const isInsideFigure = (node) => Boolean(node.closest("figure"));
+  const isAfter = (reference, node) => Boolean(reference.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const firstArticleNode = (reference = null) => contentNodes.find((node) => {
+    if (isInsideFigure(node) || (reference && (reference.contains(node) || !isAfter(reference, node)))) return false;
+    return true;
+  });
+
+  let bodyNode = firstArticleNode(contextGroup);
+  if (contextGroup) contextGroup.classList.add("article-reading__synopsis");
+  if (!bodyNode) bodyNode = firstArticleNode();
+  const bodyParent = bodyNode?.parentNode;
+  if (!bodyNode || !bodyParent) return template.innerHTML;
+
+  bodyNode.classList.add("article-reading__body-content");
   const divider = document.createElement("div");
   divider.className = "article-reading__body-divider";
   divider.setAttribute("role", "separator");
   divider.setAttribute("aria-label", "Article begins");
   divider.innerHTML = "<span>Article</span>";
-  bodyGroup.parentElement.insertBefore(divider, bodyGroup);
+  bodyParent.insertBefore(divider, bodyNode);
   return template.innerHTML;
 }
 
