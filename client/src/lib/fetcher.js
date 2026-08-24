@@ -180,12 +180,14 @@ function recordHasAccessGate(record) {
   catch { return false; }
 }
 
-function isEconomicTimesSectionUrl(url) {
+export function isArticleIndexUrl(url) {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
     const path = parsed.pathname.replace(/\/+$/, "") || "/";
-    return (host === "economictimes.com" || host === "economictimes.indiatimes.com") && /^\/prime(?:-exclusive)?$/.test(path);
+    if (host !== "economictimes.com" && host !== "economictimes.indiatimes.com") return false;
+    if (/\/(?:primearticleshow|articleshow)\//i.test(path)) return false;
+    return path === "/" || /^\/(?:prime|prime-exclusive|news|markets|wealth|industry|finance|business|hbr|small-business)(?:\/[^/]+)?$/.test(path);
   } catch { return false; }
 }
 
@@ -377,6 +379,39 @@ function deepScrape(doc, url, existingTitle = "", existingByline = "") {
   const html = paragraphs.map(t => `<p>${escapeHtml(t)}</p>`).join("");
   const text = paragraphs.join(" ");
   return { title, byline, content: heroImage(doc, url, title, html) + html, textContent: text, excerpt: text.slice(0, 240) };
+}
+
+// ─── Public article-index discovery ───
+export async function discoverArticleIndex(url, options = {}) {
+  if (!isArticleIndexUrl(url)) return null;
+  options.log?.("fetch.index.started", "Reading public Economic Times article index");
+  const html = await fetchHtml(url, options);
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const items = [];
+  const seen = new Set();
+  for (const anchor of doc.querySelectorAll("a[href]")) {
+    const titleNode = anchor.querySelector("h1, h2, h3, [class*='2jXNG'], [class*='title'], [data-name='article-title']");
+    const label = clean(titleNode?.textContent || anchor.getAttribute("aria-label") || anchor.getAttribute("title") || anchor.textContent || "");
+    if (label.length < 18 || /^(read more|view all|subscribe|sign in|login)$/i.test(label)) continue;
+    let href;
+    try { href = new URL(anchor.getAttribute("href"), url); }
+    catch { continue; }
+    const host = href.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    if (host !== "economictimes.com" && host !== "economictimes.indiatimes.com") continue;
+    if (!/\/(?:prime|prime-exclusive)\/.+\/(?:primearticleshow|articleshow)\//i.test(href.pathname)) continue;
+    href.hash = "";
+    const normalizedUrl = href.toString();
+    if (seen.has(normalizedUrl)) continue;
+    seen.add(normalizedUrl);
+    const sectionNode = anchor.querySelector("[data-name='l2-category'], .I3nXR a, .I3nXR [data-sectiontype]");
+    const section = clean(sectionNode?.textContent || anchor.dataset.sectiontype || (href.pathname.startsWith("/prime/") ? "Prime" : "Economic Times"));
+    items.push({ url: normalizedUrl, title: label.replace(/\s*\|\s*The Economic Times\s*$/i, "").slice(0, 220), section: section.slice(0, 80) });
+    if (items.length >= 80) break;
+  }
+  if (!items.length) throw extractionError("index_empty", "No public Economic Times Prime article links were found on this page.");
+  const title = fixTitle(doc, "Economic Times");
+  options.log?.("fetch.index.succeeded", `${items.length} public article links`);
+  return { title, source: "Economic Times", sourceUrl: url, items };
 }
 
 // ─── Fetch raw HTML ───

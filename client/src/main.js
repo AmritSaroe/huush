@@ -7,7 +7,7 @@ import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Preferences } from "@capacitor/preferences";
 import { Readability } from "@mozilla/readability";
-import { extractArticle } from "./lib/fetcher.js";
+import { discoverArticleIndex, extractArticle } from "./lib/fetcher.js";
 import { extractSmryArticle, getSmryReaderUrl } from "./lib/smry.js";
 import { sanitizeContent } from "./lib/article-sanitizer.js";
 import { listArticles, migrateLegacyArticles, removeArticle, restoreArticle, saveArticle as storeSaveArticle, setArticleCollections } from "./lib/article-store.js";
@@ -33,6 +33,7 @@ const state = {
   articleScrollTop: 0,
   settingsOpen: false,
   captureOpen: false,
+  articleIndex: null,
   focusMode: false,
   articles: [],
   collections: [],
@@ -281,6 +282,17 @@ function articleListMarkup() {
   }).join("")}</div></section>`;
 }
 
+function articleIndexMarkup() {
+  const index = state.articleIndex;
+  if (!index) return libraryMarkup();
+  return `<main class="dashboard-screen article-index-screen">
+    <header class="editorial-topbar editorial-topbar--clean"><button class="mark-button" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><span class="editorial-topbar__brand">whitemint</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
+    <section class="daily-brief daily-brief--clean"><p>${escapeHtml(index.source || "Economic Times")}</p><h1>Choose a reading.</h1><p class="article-index-intro">This page contains ${index.items.length} publicly listed articles. Select one to fetch and format the individual story.</p></section>
+    <section class="article-index-list" aria-label="Economic Times articles">${index.items.map((item, position) => `<button class="article-index-card" data-action="select-index-article" data-url="${escapeHtml(item.url)}"><span class="article-index-card__number">${String(position + 1).padStart(2, "0")}</span><span class="article-index-card__copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.section || "Economic Times")}</small></span><span class="article-index-card__arrow">${icon("chevron", 20)}</span></button>`).join("")}</section>
+    ${state.busy ? `<p class="article-index-loading" role="status">Loading selected article…</p>` : ""}
+  </main>${bottomNavigationMarkup()}`;
+}
+
 function libraryMarkup() {
   return `<main class="dashboard-screen editorial-library">
     <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">whitemint</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
@@ -324,12 +336,42 @@ function toastMarkup() {
 
 function render() {
   const root = document.querySelector("#root");
-  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
+  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.articleIndex ? articleIndexMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${state.article || state.articleIndex || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
   applySettings();
   if (state.article) requestAnimationFrame(() => {
     const surface = document.querySelector(".reader-scroll-surface");
     if (surface) surface.scrollTop = state.articleScrollTop;
   });
+}
+
+async function handleExtractUrl(url) {
+  state.busy = true;
+  render();
+  try {
+    const index = await discoverArticleIndex(url, { log });
+    if (index) {
+      state.articleIndex = index;
+      state.captureOpen = false;
+      state.collectionSheet = null;
+      return;
+    }
+    const article = await extractArticle(url, { log });
+    const savedArticle = await saveArticle(article);
+    state.articleIndex = null;
+    state.article = savedArticle;
+    state.collectionSheet = { type: "organize", articleId: savedArticle.id };
+    state.articleScrollTop = 0;
+    state.focusMode = false;
+    state.captureOpen = false;
+    showToast("Saved to your reading shelf.", "success");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown extraction error";
+    log("fetch.failed", `${safeUrlForLog(url)} · ${errorMessage}`);
+    showToast(error?.code === "section_page" ? errorMessage : error?.code === "index_empty" ? errorMessage : "Couldn’t save this article. Check the diagnostic log if it continues.", "error");
+  } finally {
+    state.busy = false;
+    render();
+  }
 }
 
 async function handleExtract(form) {
@@ -344,25 +386,7 @@ async function handleExtract(form) {
     showToast(message, "error");
     return;
   }
-  state.busy = true;
-  render();
-  try {
-    const article = await extractArticle(checkedUrl.toString(), { log });
-    const savedArticle = await saveArticle(article);
-    state.article = savedArticle;
-    state.collectionSheet = { type: "organize", articleId: savedArticle.id };
-    state.articleScrollTop = 0;
-    state.focusMode = false;
-    state.captureOpen = false;
-    showToast("Saved to your reading shelf.", "success");
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown extraction error";
-    log("fetch.failed", `${safeUrlForLog(url)} · ${errorMessage}`);
-    showToast(error?.code === "section_page" ? errorMessage : "Couldn’t save this article. Check the diagnostic log if it continues.", "error");
-  } finally {
-    state.busy = false;
-    render();
-  }
+  await handleExtractUrl(checkedUrl.toString());
 }
 
 function invalidateSmryRequest() {
@@ -473,6 +497,12 @@ function navigateBack() {
     render();
     return true;
   }
+  if (state.articleIndex) {
+    state.articleIndex = null;
+    state.busy = false;
+    render();
+    return true;
+  }
   if (state.activeTab !== "library") {
     state.activeTab = "library";
     render();
@@ -488,6 +518,7 @@ async function handleAction(target) {
     invalidateSmryRequest();
     state.activeTab = "library";
     state.article = null;
+    state.articleIndex = null;
     state.captureOpen = false;
     state.focusMode = false;
     render();
@@ -504,6 +535,7 @@ async function handleAction(target) {
     return;
   }
   if (action === "open-capture") {
+    state.articleIndex = null;
     state.captureOpen = true;
     state.settingsOpen = false;
     render();
@@ -513,6 +545,11 @@ async function handleAction(target) {
   if (action === "close-capture") {
     state.captureOpen = false;
     render();
+    return;
+  }
+  if (action === "select-index-article") {
+    const url = target.dataset.url;
+    if (url) void handleExtractUrl(url);
     return;
   }
   if (action === "set-collection") { state.activeCollectionId = target.dataset.collectionId || "all"; render(); return; }
