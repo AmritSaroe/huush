@@ -54,6 +54,7 @@ const state = {
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
 let nativeStatusBarConfigured = false;
 let nativeStatusBarStyle = "";
+let nativeStatusBarColor = "";
 let readerLastScrollTop = 0;
 
 function normalizeSettings(saved = {}) {
@@ -169,6 +170,11 @@ async function syncNativeStatusBar() {
     if (nativeStatusBarStyle !== style) {
       await StatusBar.setStyle({ style });
       nativeStatusBarStyle = style;
+    }
+    const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#e9d8b1" }[state.settings.theme] || "#f4f4f1";
+    if (nativeStatusBarColor !== themeColor) {
+      await StatusBar.setBackgroundColor({ color: themeColor });
+      nativeStatusBarColor = themeColor;
     }
   } catch (error) {
     log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable");
