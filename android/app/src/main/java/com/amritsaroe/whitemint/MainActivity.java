@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -21,6 +22,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
