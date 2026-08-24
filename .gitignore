@@ -6,6 +6,8 @@
 dist/
 build/
 *.dist
+# Android packages are generated release artifacts, not source files
+*.apk
 
 # Environment variables
 .env
