@@ -55,6 +55,9 @@ export async function extractArticle(url, options = {}) {
       for (const candidate of adapter.extractCandidates?.(doc, url, options) || []) {
         if (candidate) candidates.push(candidate);
       }
+      for (const candidate of await adapter.extractCandidatesAsync?.(doc, url, options) || []) {
+        if (candidate) candidates.push(candidate);
+      }
     }
     for (const candidate of genericAdapter.extractCandidates(doc, url, options) || []) {
       if (candidate) candidates.push(candidate);
