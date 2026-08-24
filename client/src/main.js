@@ -163,7 +163,7 @@ async function syncNativeStatusBar() {
   if (!Capacitor.isNativePlatform()) return;
   try {
     if (!nativeStatusBarConfigured) {
-      await StatusBar.setOverlaysWebView({ overlay: true });
+      await StatusBar.setOverlaysWebView({ overlay: false });
       nativeStatusBarConfigured = true;
     }
     const style = state.settings.theme === "dark" ? Style.Light : Style.Dark;
@@ -184,6 +184,7 @@ async function syncNativeStatusBar() {
 function applySettings() {
   const root = document.documentElement;
   root.dataset.theme = state.settings.theme;
+  root.dataset.nativePlatform = Capacitor.isNativePlatform() ? "true" : "false";
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
   const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#e9d8b1" }[state.settings.theme] || "#f4f4f1";
   root.style.setProperty("--wm-system-bar-color", themeColor);

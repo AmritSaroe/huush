@@ -2,7 +2,6 @@ package com.amritsaroe.whitemint;
 
 import android.graphics.Color;
 import android.os.Bundle;
-import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -18,15 +17,17 @@ import java.util.Locale;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();
+        // Use the traditional non-overlay layout so Android can render an actual
+        // status-bar surface. This is supported while Whitemint targets SDK 34.
+        WindowCompat.setDecorFitsSystemWindows(window, true);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        window.setStatusBarColor(Color.TRANSPARENT);
-        window.setNavigationBarColor(Color.TRANSPARENT);
+        window.setStatusBarColor(Color.parseColor("#F4F4F1"));
+        window.setNavigationBarColor(Color.parseColor("#F4F4F1"));
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.setNavigationBarDividerColor(Color.TRANSPARENT);
+            window.setNavigationBarDividerColor(Color.parseColor("#F4F4F1"));
         }
 
         bridgeInsetsToWebView();
@@ -36,23 +37,24 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() == null || getBridge().getWebView() == null) return;
         View webView = getBridge().getWebView();
         ViewCompat.setOnApplyWindowInsetsListener(webView, (view, insets) -> {
-            int insetTypes = WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout();
-            androidx.core.graphics.Insets systemInsets = insets.getInsets(insetTypes);
             androidx.core.graphics.Insets imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime());
+            androidx.core.graphics.Insets systemInsets = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
             int keyboardBottom = Math.max(0, imeInsets.bottom - systemInsets.bottom);
-            DisplayMetrics metrics = getResources().getDisplayMetrics();
-            float density = metrics.density > 0 ? metrics.density : 1f;
+            float density = getResources().getDisplayMetrics().density > 0
+                ? getResources().getDisplayMetrics().density
+                : 1f;
             String script = String.format(
                 Locale.US,
-                "document.documentElement.style.setProperty('--wm-native-safe-top','%.2fpx');" +
-                    "document.documentElement.style.setProperty('--wm-native-safe-right','%.2fpx');" +
-                    "document.documentElement.style.setProperty('--wm-native-safe-bottom','%.2fpx');" +
-                    "document.documentElement.style.setProperty('--wm-native-safe-left','%.2fpx');" +
+                // The WebView is below system bars in this mode, so safe-area
+                // padding must not be applied a second time. Keep the IME value
+                // available for the keyboard-safe bottom sheet fallback.
+                "document.documentElement.style.setProperty('--wm-native-safe-top','0px');" +
+                    "document.documentElement.style.setProperty('--wm-native-safe-right','0px');" +
+                    "document.documentElement.style.setProperty('--wm-native-safe-bottom','0px');" +
+                    "document.documentElement.style.setProperty('--wm-native-safe-left','0px');" +
                     "document.documentElement.style.setProperty('--wm-native-keyboard-inset','%.2fpx');",
-                systemInsets.top / density,
-                systemInsets.right / density,
-                systemInsets.bottom / density,
-                systemInsets.left / density,
                 keyboardBottom / density
             );
             getBridge().getWebView().evaluateJavascript(script, null);
