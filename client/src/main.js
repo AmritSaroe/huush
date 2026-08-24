@@ -115,11 +115,11 @@ const storage = {
   },
 };
 
-function log(event, detail = "") {
+function log(event, detail = "", { refreshDebug = true } = {}) {
   const entry = { time: new Date().toISOString(), event, detail: typeof detail === "string" ? detail : JSON.stringify(detail) };
   state.logs = [entry, ...state.logs].slice(0, LIMITS.logs);
   void storage.set(KEYS.logs, state.logs);
-  if (state.activeTab === "debug" && !state.article) render();
+  if (refreshDebug && state.activeTab === "debug" && !state.article) render();
 }
 
 function safeUrlForLog(value) {
@@ -177,7 +177,7 @@ async function syncNativeStatusBar() {
       nativeStatusBarColor = themeColor;
     }
     const info = await StatusBar.getInfo();
-    log("status-bar.state", info);
+    log("status-bar.state", info, { refreshDebug: false });
   } catch (error) {
     log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable");
   }
