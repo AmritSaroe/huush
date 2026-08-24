@@ -994,3 +994,8 @@ button:not(:disabled):active,
 .developer-log-row__level--error{color:#c4473d}.developer-log-row__level--warn{color:#b57924}.developer-log-row__level--info{color:var(--muted)}.developer-log-row__level--debug{color:var(--faint)}
 .developer-log-row__detail{margin:11px 0 2px 107px;padding:12px;border-radius:5px;background:var(--soft);color:var(--muted);font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-x:auto;word-break:break-word}
 @media (max-width:480px){.developer-log-row__header{grid-template-columns:47px 43px minmax(0,1fr) 18px;gap:6px}.developer-log-row__detail{margin-left:0}.log-viewer-screen__title h1{font-size:29px}}
+
+/* Developer Options actions are localized: direct hiding must not reflow Settings. */
+#developer-options.hidden{display:none!important}
+#developer-options:not(.hidden){display:block}
+#developer-options button{display:flex;width:100%;margin-bottom:0}

@@ -478,6 +478,25 @@ function setFocusMode(next) {
   if (announce) announce.textContent = next ? "Focus mode on. Tap the article again to show controls." : "Reader controls shown.";
 }
 
+function showToastInPlace(message, type = "neutral", action = "") {
+  state.toast = { message, type, action };
+  const shell = document.querySelector(".app-shell");
+  const currentToast = shell?.querySelector(".toast");
+  if (!shell) return showToast(message, type, action);
+  const host = document.createElement("div");
+  host.innerHTML = toastMarkup();
+  const nextToast = host.firstElementChild;
+  if (nextToast) {
+    if (currentToast) currentToast.replaceWith(nextToast);
+    else shell.append(nextToast);
+  }
+  window.clearTimeout(showToast.timeout);
+  showToast.timeout = window.setTimeout(() => {
+    state.toast = null;
+    document.querySelector(".toast")?.remove();
+  }, 3200);
+}
+
 function showToast(message, type = "neutral", action = "") {
   state.toast = { message, type, action };
   render();
@@ -640,7 +659,7 @@ function logRowMarkup(entry, index) {
 
 function developerOptionsMarkup() {
   if (!state.developerOptionsEnabled) return "";
-  return `<section class="settings-section-block developer-options" aria-labelledby="developer-options-title"><div class="settings-section-heading"><p>Developer</p><h2 id="developer-options-title">Developer options.</h2></div><div class="developer-options__list"><button class="developer-option-row" data-action="toggle-developer-logging" aria-pressed="${state.developerLoggingEnabled}"><span><strong>Logging enabled</strong><small>Keep diagnostic events on for troubleshooting.</small></span><b class="developer-toggle ${state.developerLoggingEnabled ? "is-on" : ""}">${state.developerLoggingEnabled ? "On" : "Off"}</b></button><button class="developer-option-row" data-action="toggle-developer-verbose" aria-pressed="${state.developerVerboseLogging}"><span><strong>Verbose logging</strong><small>Includes performance events and may impact performance.</small></span><b class="developer-toggle ${state.developerVerboseLogging ? "is-on" : ""}">${state.developerVerboseLogging ? "On" : "Off"}</b></button><button class="developer-option-row" data-action="open-log-viewer"><span><strong>View event log</strong><small>Search, filter, expand, and inspect the last 200 events.</small></span>${icon("chevron", 18)}</button><button class="developer-option-row" data-action="export-logs"><span><strong>Export logs</strong><small>Share a diagnostic JSON file only when you choose.</small></span>${icon("chevron", 18)}</button><button class="developer-option-row" data-action="clear-developer-logs"><span><strong>Clear logs</strong><small>Delete the diagnostic history without clearing articles.</small></span>${icon("trash", 18)}</button><button class="developer-option-row" data-action="simulate-error"><span><strong>Simulate error</strong><small>Generate a harmless test error for verification.</small></span>${icon("terminal", 18)}</button><button class="developer-option-row" data-action="reset-developer-options"><span><strong>Reset developer options</strong><small>Hide this section again without deleting logs.</small></span>${icon("chevron", 18)}</button><button class="developer-option-row" data-action="reset-settings"><span><strong>Reset reading defaults</strong><small>Restore Inter, 18px, and the light theme.</small></span>${icon("chevron", 18)}</button></div></section>`;
+  return `<section id="developer-options" class="settings-section-block developer-options" aria-labelledby="developer-options-title"><div class="settings-section-heading"><p>Developer</p><h2 id="developer-options-title">Developer options.</h2></div><div class="developer-options__list"><button type="button" class="developer-option-row" data-action="toggle-developer-logging" aria-pressed="${state.developerLoggingEnabled}"><span><strong>Logging enabled</strong><small>Keep diagnostic events on for troubleshooting.</small></span><b class="developer-toggle ${state.developerLoggingEnabled ? "is-on" : ""}">${state.developerLoggingEnabled ? "On" : "Off"}</b></button><button type="button" class="developer-option-row" data-action="toggle-developer-verbose" aria-pressed="${state.developerVerboseLogging}"><span><strong>Verbose logging</strong><small>Includes performance events and may impact performance.</small></span><b class="developer-toggle ${state.developerVerboseLogging ? "is-on" : ""}">${state.developerVerboseLogging ? "On" : "Off"}</b></button><button type="button" class="developer-option-row" data-action="open-log-viewer"><span><strong>View event log</strong><small>Search, filter, expand, and inspect the last 200 events.</small></span>${icon("chevron", 18)}</button><button type="button" class="developer-option-row" data-action="export-logs"><span><strong>Export logs</strong><small>Share a diagnostic JSON file only when you choose.</small></span>${icon("chevron", 18)}</button><button type="button" class="developer-option-row" data-action="clear-developer-logs"><span><strong>Clear logs</strong><small>Delete the diagnostic history without clearing articles.</small></span>${icon("trash", 18)}</button><button type="button" class="developer-option-row" data-action="simulate-error"><span><strong>Simulate error</strong><small>Generate a harmless test error for verification.</small></span>${icon("terminal", 18)}</button><button type="button" class="developer-option-row" data-action="reset-developer-options"><span><strong>Reset developer options</strong><small>Hide this section again without deleting logs.</small></span>${icon("chevron", 18)}</button><button type="button" class="developer-option-row" data-action="reset-settings"><span><strong>Reset reading defaults</strong><small>Restore Inter, 18px, and the light theme.</small></span>${icon("chevron", 18)}</button></div></section>`;
 }
 
 function logViewerMarkup() {
@@ -1187,7 +1206,7 @@ async function handleAction(target) {
   if (action === "filter-logs") { state.logViewerFilter = target.dataset.filter || "all"; render(); return; }
   if (action === "toggle-log-entry") { state.expandedLogKey = state.expandedLogKey === target.dataset.logKey ? "" : target.dataset.logKey || ""; render(); return; }
   if (action === "export-logs") {
-    try { await exportLogs(); logger.log("diagnostics.exported", { eventCount: logger.getAllEvents().length }); showToast("Diagnostic JSON ready to share.", "success"); }
+    try { await exportLogs(); logger.log("diagnostics.exported", { eventCount: logger.getAllEvents().length }); showToastInPlace("Diagnostic JSON ready to share.", "success"); }
     catch (error) { logCapacitorError("Share", "share", error); showToast("Couldn’t export diagnostics.", "error"); }
     return;
   }
@@ -1195,11 +1214,31 @@ async function handleAction(target) {
     if (!window.confirm("Delete all diagnostic logs? This cannot be undone.")) return;
     logger.clear();
     state.logViewerEvents = [];
-    showToast("Diagnostic logs cleared.", "success");
+    showToastInPlace("Diagnostic logs cleared.", "success");
     return;
   }
-  if (action === "simulate-error") { window.setTimeout(() => { throw new Error("Huush simulated developer error"); }, 0); showToast("Simulated error captured.", "neutral"); return; }
-  if (action === "reset-developer-options") { state.developerOptionsEnabled = false; state.developerLoggingEnabled = true; state.developerVerboseLogging = false; logger.setEnabled(true); logger.setVerbose(false); try { window.localStorage.removeItem(STORAGE_FLAGS.developer); } catch { /* no-op */ } render(); return; }
+  if (action === "simulate-error") {
+    const testError = new Error("Huush simulated developer error");
+    logger.log("error.test", { message: testError.message, stack: testError.stack }, "error");
+    showToastInPlace("Test error logged. Check event log.", "neutral");
+    return;
+  }
+  if (action === "reset-developer-options") {
+    state.developerOptionsEnabled = false;
+    state.developerLoggingEnabled = true;
+    state.developerVerboseLogging = false;
+    logger.setEnabled(true);
+    logger.setVerbose(false);
+    try { window.localStorage.removeItem(STORAGE_FLAGS.developer); } catch { /* no-op */ }
+    const section = document.querySelector("#developer-options");
+    if (section) {
+      section.classList.add("hidden");
+      section.style.display = "none";
+      section.setAttribute("aria-hidden", "true");
+    }
+    showToastInPlace("Developer options hidden.", "neutral");
+    return;
+  }
   if (action === "reset-settings") { resetReadingDefaults(); return; }
   if (action === "retry-smry") {
     await retryWithSmry();
@@ -1344,6 +1383,10 @@ document.addEventListener("pointercancel", resetSwipeGesture);
 
 document.addEventListener("click", (event) => {
   const actionTarget = event.target.closest("[data-action]");
+  if (actionTarget?.closest("#developer-options")) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   if (swipeGesture.suppressClick && actionTarget?.matches(".article-card")) {
     event.preventDefault();
     swipeGesture.suppressClick = false;
