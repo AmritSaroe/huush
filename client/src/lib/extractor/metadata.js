@@ -66,14 +66,15 @@ function escapeAttribute(value = "") {
     .replaceAll(">", "&gt;");
 }
 
-function imageIdentity(value, baseUrl) {
+export function imageIdentity(value, baseUrl) {
   try {
     const parsed = new URL(value, baseUrl);
     let pathname = parsed.pathname.replace(/\/+$/, "").toLowerCase();
     if (parsed.hostname.toLowerCase().endsWith("livemint.com")) {
       pathname = pathname.replace(/\/(?:\d+x\d+)(?:\/logo)?(?=\/)/i, "");
+      return `${parsed.hostname.toLowerCase()}${pathname}`;
     }
-    return `${parsed.hostname.toLowerCase()}${pathname}`;
+    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
   } catch {
     return String(value || "").trim().toLowerCase();
   }
@@ -101,23 +102,39 @@ export function fixByline(doc, fallback = "") {
     || "";
 }
 
-export function heroImage(doc, baseUrl, title, bodyHtml = "") {
+export function getHeroImageUrl(doc, baseUrl) {
   const source = [
     doc?.querySelector('meta[property="og:image"]')?.content,
     doc?.querySelector('meta[name="twitter:image"]')?.content,
+    doc?.querySelector('meta[name="twitter:image:src"]')?.content,
   ].find(Boolean);
   if (!source) return "";
-  try {
-    const resolved = new URL(source, baseUrl).href;
-    const bodyDoc = new DOMParser().parseFromString(bodyHtml, "text/html");
-    const sourceIdentity = imageIdentity(resolved, baseUrl);
-    const bodyImages = [...bodyDoc.querySelectorAll("img")]
-      .map((image) => image.getAttribute("src"))
-      .filter(Boolean)
-      .map((value) => imageIdentity(value, baseUrl));
-    if (bodyImages.includes(sourceIdentity)) return "";
-    return `<figure><img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(title)}" loading="eager" decoding="async"></figure>`;
-  } catch {
-    return "";
-  }
+  try { return new URL(source, baseUrl).href; } catch { return ""; }
+}
+
+export function stripImageByIdentity(html = "", imageUrl = "", baseUrl = "") {
+  if (!html || !imageUrl) return html;
+  const targetIdentity = imageIdentity(imageUrl, baseUrl);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  container.querySelectorAll("img").forEach((image) => {
+    const source = image.getAttribute("src");
+    if (!source || imageIdentity(source, baseUrl) !== targetIdentity) return;
+    const figure = image.closest("figure");
+    if (figure && figure.querySelectorAll("img").length === 1) figure.remove();
+    else image.remove();
+  });
+  container.querySelectorAll("picture").forEach((picture) => {
+    if (picture.querySelector("img")) return;
+    const figure = picture.closest("figure");
+    if (figure && !figure.querySelector("img")) figure.remove();
+    else picture.remove();
+  });
+  return container.innerHTML;
+}
+
+export function heroImage(doc, baseUrl, title) {
+  const resolved = getHeroImageUrl(doc, baseUrl);
+  if (!resolved) return "";
+  return `<figure><img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(title)}" loading="eager" decoding="async"></figure>`;
 }

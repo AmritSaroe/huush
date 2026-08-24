@@ -1,5 +1,7 @@
 import DOMPurify from "dompurify";
 
+import { imageIdentity } from "./extractor/metadata.js";
+
 const PURIFY_CONFIG = {
   USE_PROFILES: { html: true },
   ALLOW_DATA_ATTR: false,
@@ -42,16 +44,32 @@ export function sanitizeContent(html = "", baseUrl = "", heroFallback = "") {
   container.innerHTML = String(html || "");
   removeUnsafeNodes(container);
 
+  const seenImageIdentities = new Set();
   container.querySelectorAll("img").forEach((image) => {
     const src = resolveImageCandidate(image, baseUrl);
     if (!src) {
       image.remove();
       return;
     }
+    const identity = imageIdentity(src, baseUrl);
+    if (seenImageIdentities.has(identity)) {
+      const figure = image.closest("figure");
+      if (figure && figure.querySelectorAll("img").length === 1) figure.remove();
+      else image.remove();
+      return;
+    }
+    seenImageIdentities.add(identity);
     image.setAttribute("src", src);
     image.setAttribute("loading", "lazy");
     image.setAttribute("decoding", "async");
     ["srcset", "data-src", "data-original", "data-lazy-src", "data-srcset", "sizes"].forEach((attribute) => image.removeAttribute(attribute));
+  });
+
+  container.querySelectorAll("picture").forEach((picture) => {
+    if (picture.querySelector("img")) return;
+    const figure = picture.closest("figure");
+    if (figure && !figure.querySelector("img")) figure.remove();
+    else picture.remove();
   });
 
   container.querySelectorAll("*").forEach((element) => {

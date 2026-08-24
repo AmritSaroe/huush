@@ -1,4 +1,4 @@
-import { fixByline, fixTitle, heroImage, cleanText } from "../extractor/metadata.js";
+import { fixByline, fixTitle, getHeroImageUrl, heroImage, stripImageByIdentity, cleanText } from "../extractor/metadata.js";
 import { escapeHtml, htmlFromPlainText, sanitizeHtml, textFromHtml } from "../extractor/sanitize.js";
 import { recordHasAccessGate } from "../extractor/paywall.js";
 
@@ -205,7 +205,7 @@ export function extractJsonCandidate(doc, url) {
   return {
     title,
     byline,
-    content: `${heroImage(doc, url, title, content)}${content}`,
+    content: `${heroImage(doc, url, title)}${stripImageByIdentity(content, getHeroImageUrl(doc, url), url)}`,
     textContent,
     excerpt: textContent.slice(0, 240),
     gated: recordHasAccessGate(record) || documentHasAccessGate(doc),

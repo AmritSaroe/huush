@@ -1,5 +1,5 @@
 import { Readability } from "@mozilla/readability";
-import { fixByline, fixTitle, heroImage, cleanText } from "./metadata.js";
+import { fixByline, fixTitle, getHeroImageUrl, heroImage, stripImageByIdentity, cleanText } from "./metadata.js";
 import { escapeHtml, sanitizeHtml, textFromHtml } from "./sanitize.js";
 import { PAYWALL_PHRASES } from "./paywall.js";
 
@@ -14,7 +14,7 @@ function fromReadability(doc, url) {
   return {
     title,
     byline,
-    content: `${heroImage(doc, url, title, content)}${content}`,
+    content: `${heroImage(doc, url, title)}${stripImageByIdentity(content, getHeroImageUrl(doc, url), url)}`,
     textContent,
     excerpt: textContent.slice(0, 240),
   };
@@ -59,7 +59,7 @@ function fromParagraphs(doc, url, existingTitle = "", existingByline = "") {
   return {
     title,
     byline,
-    content: `${heroImage(doc, url, title, html)}${html}`,
+    content: `${heroImage(doc, url, title)}${stripImageByIdentity(html, getHeroImageUrl(doc, url), url)}`,
     textContent,
     excerpt: textContent.slice(0, 240),
   };
