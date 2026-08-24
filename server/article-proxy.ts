@@ -5,7 +5,7 @@ const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const DIRECT_TIMEOUT_MS = 20_000;
 const JINA_TIMEOUT_MS = 45_000;
 const RATE_WINDOW_MS = 60_000;
-const RATE_LIMIT = Math.min(120, Math.max(1, Number(process.env.WHITEMINT_PROXY_RATE_LIMIT || 30)));
+const RATE_LIMIT = Math.min(120, Math.max(1, Number(process.env.HUUSH_PROXY_RATE_LIMIT || process.env.WHITEMINT_PROXY_RATE_LIMIT || 30)));
 
 const ALLOWED_HOSTS = [
   "thehindu.com",
@@ -30,7 +30,7 @@ function isAllowedHost(hostname: string) {
 }
 
 function parseTarget(request: IncomingMessage) {
-  const requestUrl = new URL(request.url || "/", "http://whitemint.local");
+  const requestUrl = new URL(request.url || "/", "http://huush.local");
   const rawTarget = requestUrl.searchParams.get("url") || "";
   if (!rawTarget || rawTarget.length > MAX_URL_LENGTH) {
     throw new ProxyError(400, "invalid_url", "A public article URL is required.");
@@ -47,7 +47,7 @@ function parseTarget(request: IncomingMessage) {
     throw new ProxyError(400, "invalid_url", "Only public HTTP or HTTPS article URLs are supported.");
   }
   if (!isAllowedHost(target.hostname)) {
-    throw new ProxyError(403, "publisher_not_allowed", "This publisher is not enabled for the Whitemint web proxy.");
+    throw new ProxyError(403, "publisher_not_allowed", "This publisher is not enabled for the Huush web proxy.");
   }
   return target;
 }
@@ -120,7 +120,7 @@ async function tryDirect(target: URL) {
   const response = await fetchWithTimeout(target.href, DIRECT_TIMEOUT_MS, {
     Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-IN,en;q=0.8",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36 Whitemint/1.5",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36 Huush/1.0",
   });
 
   let finalUrl: URL;
@@ -150,7 +150,7 @@ async function tryJina(target: URL) {
     "X-Engine": "browser",
     "X-With-Iframe": "true",
     "X-Timeout": "30",
-    "User-Agent": "Whitemint/1.5 public-reader",
+    "User-Agent": "Huush/1.0 public-reader",
   });
   if (!response.ok) return null;
   const html = await readLimited(response);
@@ -203,8 +203,8 @@ export async function handleArticleFetch(request: IncomingMessage, response: Ser
       "Cache-Control": "no-store",
       "Content-Type": "text/html; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
-      "X-Whitemint-Transport": result.transport,
-      "X-Whitemint-Source": result.finalUrl,
+      "X-Huush-Transport": result.transport,
+      "X-Huush-Source": result.finalUrl,
     });
     response.end(result.html);
   } catch (error) {
@@ -232,7 +232,7 @@ export async function handleSmryFetch(request: IncomingMessage, response: Server
 
     const upstream = await fetchWithTimeout(endpoint.href, JINA_TIMEOUT_MS, {
       Accept: "text/plain",
-      "User-Agent": "Whitemint/1.5 public-reader",
+      "User-Agent": "Huush/1.0 public-reader",
     });
     if (!upstream.ok) throw new ProxyError(502, `smry_http_${upstream.status}`, `smry returned HTTP ${upstream.status}.`);
 
@@ -243,7 +243,7 @@ export async function handleSmryFetch(request: IncomingMessage, response: Server
       "Cache-Control": "no-store",
       "Content-Type": "text/plain; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
-      "X-Whitemint-Transport": "smry-server",
+      "X-Huush-Transport": "smry-server",
     };
     for (const name of ["x-smry-title", "x-smry-author", "x-smry-publisher", "x-smry-source", "x-smry-tokens"]) {
       const value = upstream.headers.get(name);

@@ -153,7 +153,7 @@ function vitePluginManusDebugCollector(): Plugin {
 
 function vitePluginArticleFetchProxy(): Plugin {
   return {
-    name: "whitemint-article-fetch-proxy",
+    name: "huush-article-fetch-proxy",
     configureServer(server: ViteDevServer) {
       server.middlewares.use("/api/article-fetch", (req, res) => {
         void handleArticleFetch(req, res);

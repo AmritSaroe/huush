@@ -1,4 +1,4 @@
-package com.amritsaroe.whitemint;
+package com.amritsaroe.huush;
 
 import android.graphics.Color;
 import android.os.Bundle;
@@ -21,13 +21,13 @@ public class MainActivity extends BridgeActivity {
 
         Window window = getWindow();
         // Use the traditional non-overlay layout so Android can render an actual
-        // status-bar surface. This is supported while Whitemint targets SDK 34.
+        // status-bar surface. This is supported while Huush targets SDK 34.
         WindowCompat.setDecorFitsSystemWindows(window, true);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        window.setStatusBarColor(Color.parseColor("#F4F4F1"));
-        window.setNavigationBarColor(Color.parseColor("#F4F4F1"));
+        window.setStatusBarColor(Color.parseColor("#FAFAF8"));
+        window.setNavigationBarColor(Color.parseColor("#FAFAF8"));
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.setNavigationBarDividerColor(Color.parseColor("#F4F4F1"));
+            window.setNavigationBarDividerColor(Color.parseColor("#FAFAF8"));
         }
 
         bridgeInsetsToWebView();

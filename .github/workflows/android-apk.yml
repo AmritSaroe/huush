@@ -49,14 +49,14 @@ jobs:
       - name: Prepare named APK
         run: |
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Whitemint-Android-debug.apk
-          file artifacts/Whitemint-Android-debug.apk
-          unzip -tq artifacts/Whitemint-Android-debug.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Huush-Android-debug.apk
+          file artifacts/Huush-Android-debug.apk
+          unzip -tq artifacts/Huush-Android-debug.apk
 
       - name: Upload named APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: whitemint-android-debug-apk
-          path: artifacts/Whitemint-Android-debug.apk
+          name: huush-android-debug-apk
+          path: artifacts/Huush-Android-debug.apk
           if-no-files-found: error
           retention-days: 14

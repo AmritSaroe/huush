@@ -69,7 +69,7 @@ export async function fetchHtml(url, options = {}) {
   if (canUseWebProxy) {
     const proxyUrl = new URL("/api/article-fetch", globalThis.location.origin);
     proxyUrl.searchParams.set("url", url);
-    options.log?.("fetch.proxy.started", "Using Whitemint server proxy for browser import");
+    options.log?.("fetch.proxy.started", "Using Huush server proxy for browser import");
     try {
       const proxyResponse = await fetch(proxyUrl.href, {
         headers: { Accept: "text/html,application/xhtml+xml" },
@@ -77,7 +77,7 @@ export async function fetchHtml(url, options = {}) {
       if (!proxyResponse.ok) throw extractionError(`http_${proxyResponse.status}`, `HTTP ${proxyResponse.status}`);
       const html = await proxyResponse.text();
       assertHtmlSize(html);
-      options.log?.("fetch.proxy.succeeded", proxyResponse.headers.get("x-whitemint-transport") || "server");
+      options.log?.("fetch.proxy.succeeded", proxyResponse.headers.get("x-huush-transport") || "server");
       return html;
     } catch (error) {
       options.log?.("fetch.proxy.failed", error instanceof Error ? error.message : "Proxy request failed; trying direct fetch");

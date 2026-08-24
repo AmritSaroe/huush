@@ -1,6 +1,6 @@
-# whitemint
+# huush
 
-whitemint is a private, monochrome article reader built with **Vite and Vanilla JavaScript**, then packaged for Android using Capacitor. Articles are extracted locally with Mozilla Readability, sanitized before rendering, and retained on the device. The Debug tab exports a concise event log that can be pasted into a support conversation when an extraction fails.
+huush is a quiet, private article reader built with **Vite and Vanilla JavaScript**, then packaged for Android using Capacitor. Articles are extracted locally with Mozilla Readability, sanitized before rendering, and retained on the device. The Library, Tags, and Settings surfaces keep saved reading focused, while Settings contains the diagnostic event log for troubleshooting extraction or transport issues.
 
 ## Local development
 
@@ -8,7 +8,7 @@ Install packages with `pnpm install`, then launch the Vite preview with `pnpm de
 
 ## Android build
 
-The repository includes a GitHub Actions workflow at `.github/workflows/android-apk.yml`. Every push to `main` or `master`, and every manual workflow run, creates a debug APK artifact named `whitemint-debug-apk`. The workflow installs dependencies, builds the Vite bundle, syncs the Capacitor Android project, and runs Gradle's `assembleDebug` task.
+The repository includes a GitHub Actions workflow at `.github/workflows/android-apk.yml`. Every push to `main` or `master`, and every manual workflow run, creates a debug APK artifact named `huush-android-debug-apk`. The workflow installs dependencies, builds the Vite bundle, syncs the Capacitor Android project, and runs Gradle's `assembleDebug` task.
 
 For a local Android build, run:
 
@@ -23,4 +23,4 @@ The resulting APK is placed at `android/app/build/outputs/apk/debug/app-debug.ap
 
 ## Product behavior
 
-The app keeps up to 50 extracted articles and up to 160 recent diagnostic events. Text size, typeface, and light/dark appearance are persisted across sessions. The reader deliberately excludes advertising, social features, folders, search, sync, and external imagery so saved articles remain the focus.
+The app stores extracted articles locally and retains up to 160 recent diagnostic events. Text size, typeface, and light/dark/sepia appearance are persisted across sessions. Saved articles can be searched and organized into collections from Library and Tags.

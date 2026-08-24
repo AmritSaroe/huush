@@ -36,6 +36,8 @@ const state = {
   captureOpen: false,
   focusMode: false,
   readerToolbarHidden: false,
+  articleProgress: 0,
+  searchQuery: "",
   articles: [],
   collections: [],
   activeCollectionId: "all",
@@ -64,7 +66,7 @@ function normalizeSettings(saved = {}) {
     ...saved,
     font: FONTS.some((font) => font.id === saved.font) ? saved.font : DEFAULT_SETTINGS.font,
     theme: ["light", "dark", "sepia"].includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
-    fontSize: Math.min(26, Math.max(16, Math.round(preferredSize))),
+    fontSize: Math.min(24, Math.max(14, Math.round(preferredSize))),
   };
 }
 
@@ -118,7 +120,7 @@ function log(event, detail = "", { refreshDebug = true } = {}) {
   const entry = { time: new Date().toISOString(), event, detail: typeof detail === "string" ? detail : JSON.stringify(detail) };
   state.logs = [entry, ...state.logs].slice(0, LIMITS.logs);
   void storage.set(KEYS.logs, state.logs);
-  if (refreshDebug && state.activeTab === "debug" && !state.article) render();
+  if (refreshDebug && state.activeTab === "settings" && !state.article) render();
 }
 
 function safeUrlForLog(value) {
@@ -170,7 +172,7 @@ async function syncNativeStatusBar() {
       await StatusBar.setStyle({ style });
       nativeStatusBarStyle = style;
     }
-    const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#e9d8b1" }[state.settings.theme] || "#f4f4f1";
+    const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[state.settings.theme] || "#FAFAF8";
     if (nativeStatusBarColor !== themeColor) {
       await StatusBar.setBackgroundColor({ color: themeColor });
       nativeStatusBarColor = themeColor;
@@ -187,7 +189,7 @@ function applySettings() {
   root.dataset.theme = state.settings.theme;
   root.dataset.nativePlatform = Capacitor.isNativePlatform() ? "true" : "false";
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
-  const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#e9d8b1" }[state.settings.theme] || "#f4f4f1";
+  const themeColor = { light: "#FAFAF8", dark: "#121212", sepia: "#F5F0E6" }[state.settings.theme] || "#FAFAF8";
   root.style.setProperty("--wm-system-bar-color", themeColor);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   root.classList.toggle("dark", state.settings.theme === "dark");
@@ -203,10 +205,8 @@ function syncPreferenceControls() {
   document.querySelectorAll("[data-setting-size]").forEach((label) => {
     label.textContent = `${state.settings.fontSize}px`;
   });
-  const decrease = document.querySelector("[data-action='change-size'][data-delta='-1']");
-  const increase = document.querySelector("[data-action='change-size'][data-delta='1']");
-  if (decrease) decrease.disabled = state.settings.fontSize <= 16;
-  if (increase) increase.disabled = state.settings.fontSize >= 26;
+  const range = document.querySelector("[data-font-size-range]");
+  if (range) range.value = String(state.settings.fontSize);
 }
 
 async function persistSettings() {
@@ -254,8 +254,10 @@ function handleReaderScroll(surface) {
   const delta = scrollTop - readerLastScrollTop;
   const maxScrollTop = Math.max(0, surface.scrollHeight - surface.clientHeight);
   const nearArticleEnd = maxScrollTop - scrollTop <= 28;
-  state.articleScrollTop = scrollTop;
-  if (scrollTop <= 18 || nearArticleEnd) setReaderToolbarHidden(false);
+      state.articleScrollTop = scrollTop;
+    state.articleProgress = maxScrollTop ? Math.min(100, Math.round((scrollTop / maxScrollTop) * 100)) : 0;
+    document.querySelector(".reader-progress")?.style.setProperty("--progress", `${state.articleProgress}%`);
+    if (scrollTop <= 18 || nearArticleEnd) setReaderToolbarHidden(false);
   else if (delta > 5) setReaderToolbarHidden(true);
   else if (delta < -5) setReaderToolbarHidden(false);
   readerLastScrollTop = scrollTop;
@@ -305,6 +307,7 @@ function icon(name, size = 20) {
     copy: "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"2\"/><path d=\"M5 15V5a1 1 0 0 1 1-1h10\"/>",
     book: "<path d=\"M4.5 5.5A2.5 2.5 0 0 1 7 3h4v16H7a2.5 2.5 0 0 0-2.5 2V5.5ZM19.5 5.5A2.5 2.5 0 0 0 17 3h-4v16h4a2.5 2.5 0 0 1 2.5 2V5.5Z\"/>",
     terminal: "<path d=\"m5 7 4 5-4 5M12 17h7\"/>",
+    search: "<circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4.5 4.5\"/>",
     mark: "<path d=\"M4 4.5h6.15A3.85 3.85 0 0 1 14 8.35V20H7.85A3.85 3.85 0 0 0 4 23V4.5Z\"/><path d=\"M20 4.5h-6.15A3.85 3.85 0 0 0 10 8.35V20h6.15A3.85 3.85 0 0 1 20 23V4.5Z\"/>",
     home: "<path d=\"m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z\"/>",
     archive: "<path d=\"M4 6h16v14H4z\"/><path d=\"M3 3h18v3H3zM9 11h6\"/>",
@@ -318,7 +321,7 @@ function icon(name, size = 20) {
 }
 
 function logoMarkup(compact = false) {
-  return `<div class="brand ${compact ? "brand--compact" : ""}" aria-label="whitemint reader"><span class="brand__mark" aria-hidden="true">${icon("mark", compact ? 21 : 25)}</span>${compact ? "" : "<span class=\"brand__name\">whitemint</span>"}</div>`;
+  return `<div class="brand ${compact ? "brand--compact" : ""}" aria-label="huush reader"><span class="brand__name">huush</span></div>`;
 }
 
 function articlePreviewImage(article) {
@@ -328,7 +331,7 @@ function articlePreviewImage(article) {
 }
 
 function sourceInitials(source = "") {
-  return source.replace(/^www\./, "").split(/[.\-]/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "WM";
+  return source.replace(/^www\./, "").split(/[.\-]/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "HU";
 }
 
 function currentDayLabel() {
@@ -337,15 +340,16 @@ function currentDayLabel() {
 
 function bottomNavigationMarkup() {
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
-    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Today</span></button>
-    <button class="bottom-navigation__add" data-action="open-capture" aria-label="Add a reading">${icon("plus", 23)}<span>Add article</span></button>
-    <button class="bottom-navigation__item ${state.activeTab === "debug" ? "is-active" : ""}" data-action="show-debug">${icon("terminal", 21)}<span>Debug</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Library</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags">${icon("archive", 21)}<span>Tags</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings">${icon("settings", 21)}<span>Settings</span></button>
   </nav>`;
 }
 
 function collectionMarkup() {
-  const items = [{ id: "all", name: "All articles" }, ...state.collections];
-  return '<div class="collection-bar" aria-label="Article collections">' + items.map((item) => '<button class="collection-chip ' + (state.activeCollectionId === item.id ? "is-active" : "") + '" data-action="set-collection" data-collection-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + '</button>').join("") + '</div><div class="collection-tools"><button class="collection-tool" data-action="manage-collections">Manage collections</button><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New</button></div>';
+  const countFor = (id) => id === "all" ? state.articles.length : state.articles.filter((article) => article.collectionIds?.includes(id)).length;
+  const items = [{ id: "all", name: "All" }, ...state.collections];
+  return '<section class="collections-section" aria-label="Collections"><div class="collections-heading"><h2>Collections</h2><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New</button></div><div class="collection-bar" aria-label="Article collections">' + items.map((item) => '<button class="collection-chip ' + (state.activeCollectionId === item.id ? "is-active" : "") + '" data-action="set-collection" data-collection-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + (item.id === "all" || countFor(item.id) ? ' · ' + countFor(item.id) : '') + '</button>').join("") + '</div></section>';
 }
 function collectionManagementMarkup() {
   const custom = state.collections;
@@ -353,10 +357,12 @@ function collectionManagementMarkup() {
 }
 function organizeMarkup(article) { if (!state.collectionSheet || state.collectionSheet.type !== "organize") return ""; const selected = article.collectionIds || []; return '<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Organize article</p><h2>Choose collections.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><div class="collection-check-list">' + state.collections.map((item) => '<label><input type="checkbox" data-collection-check value="' + escapeHtml(item.id) + '" ' + (selected.includes(item.id) ? "checked" : "") + ' /><span>' + escapeHtml(item.name) + '</span></label>').join("") + '</div><button class="collection-save" data-action="save-article-collections">Save organization</button></section>'; }
 function articleListMarkup() {
-  const visibleArticles = state.activeCollectionId === "all" ? state.articles : state.articles.filter((article) => article.collectionIds?.includes(state.activeCollectionId));
+  const query = state.searchQuery.trim().toLowerCase();
+  const visibleArticles = (state.activeCollectionId === "all" ? state.articles : state.articles.filter((article) => article.collectionIds?.includes(state.activeCollectionId))).filter((article) => !query || [article.title, article.source, article.byline, article.textContent].some((value) => String(value || "").toLowerCase().includes(query)));
   if (!visibleArticles.length) {
     const hasFilter = state.activeCollectionId !== "all";
-    return `<section class="empty-library"><span class="empty-library__icon">${icon("archive", 31)}</span><div><h2>${hasFilter ? "Nothing here yet." : "Your brief begins here."}</h2><p>${hasFilter ? "Organize an article into this collection to see it here." : "Save an article that deserves a little more time."}</p></div></section>`;
+    const hasSearch = Boolean(query);
+    return `<section class="empty-library"><span class="empty-library__icon">${icon("book", 31)}</span><div><h2>${hasSearch ? "No matching articles." : hasFilter ? "Nothing here yet." : "Your brief begins here."}</h2><p>${hasSearch ? "Try a different title, source, or keyword." : hasFilter ? "Organize an article into this collection to see it here." : "Save an article that deserves a little more time."}</p></div></section>`;
   }
   return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>${state.activeCollectionId === "all" ? "Saved articles" : escapeHtml(state.collections.find((item) => item.id === state.activeCollectionId)?.name || "Collection")}</p><h2>Worth a return.</h2></div></div><div class="article-card-list">${visibleArticles.map((article) => {
     const preview = articlePreviewImage(article);
@@ -364,25 +370,39 @@ function articleListMarkup() {
   }).join("")}</div></section>`;
 }
 
+function homeCaptureMarkup() {
+  return `<section class="home-capture" aria-label="Save an article"><form class="home-capture-form" id="home-capture-form"><label class="home-url-field"><span class="sr-only">Paste an article link</span>${icon("external", 18)}<input name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="Paste a link..." ${state.busy ? "disabled" : ""} /></label><button class="home-capture-submit ${state.busy ? "is-busy" : ""}" type="submit" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 18)}<span>Add article</span></button></form></section>`;
+}
+
+function librarySearchMarkup() {
+  return `<label class="library-search"><span class="sr-only">Search saved articles</span>${icon("search", 18)}<input data-search-articles type="search" value="${escapeHtml(state.searchQuery)}" placeholder="Search saved articles..." autocomplete="off" /></label>`;
+}
+
 function libraryMarkup() {
   return `<main class="dashboard-screen editorial-library">
-    <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">whitemint</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
+    <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">huush</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
     <section class="daily-brief daily-brief--clean"><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
+    ${homeCaptureMarkup()}
     ${collectionMarkup()}
-    <button class="library-add-button" data-action="open-capture">${icon("plus", 19)}<span>Add article</span></button>
+    ${librarySearchMarkup()}
     ${articleListMarkup()}
   </main>${bottomNavigationMarkup()}${captureMarkup()}`;
+}
+
+function tagsPageMarkup() {
+  const countFor = (id) => state.articles.filter((article) => article.collectionIds?.includes(id)).length;
+  return `<main class="dashboard-screen tags-screen"><header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">huush</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header><section class="daily-brief daily-brief--clean"><h1>Find your<br /><em>next read.</em></h1></section><section class="tags-heading"><p>Organize your library</p><h2>Tags</h2></section>${state.collections.length ? `<div class="tag-list" aria-label="Saved tags">${state.collections.map((item) => `<button class="tag-list__item" data-action="open-tag" data-collection-id="${escapeHtml(item.id)}"><span class="tag-list__icon">${icon("archive", 21)}</span><span><strong>${escapeHtml(item.name)}</strong><small>${countFor(item.id)} ${countFor(item.id) === 1 ? "article" : "articles"}</small></span>${icon("chevron", 19)}</button>`).join("")}</div>` : `<section class="empty-library tags-empty"><span class="empty-library__icon">${icon("archive", 31)}</span><div><h2>No tags yet.</h2><p>Create a collection from Library to organize saved articles.</p></div></section>`}</main>${bottomNavigationMarkup()}`;
 }
 
 function captureMarkup() {
   if (!state.captureOpen) return "";
   const busy = state.busy ? "is-busy" : "";
-  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. whitemint fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
+  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. huush fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
 }
 
-function debugMarkup() {
+function settingsPageMarkup() {
   const nativeStatus = Capacitor.isNativePlatform() ? "Native Android transport" : "Browser preview";
-  return `<main class="dashboard-screen debug-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<button class="topbar-action" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear</button></header><section class="welcome-copy welcome-copy--compact"><p>Diagnostics</p><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>${escapeHtml(nativeStatus)}</strong><small>${state.articles.length} saved articles · ${state.logs.length} events</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Copy diagnostic log</strong><small>Paste it here whenever something feels off.</small></span>${icon("chevron", 18)}</button><section class="log-feed" aria-live="polite"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><span>${state.logs.length}</span></div>${state.logs.length ? state.logs.map((entry) => `<article class="log-row"><time>${formatClock(entry.time)}</time><div><strong>${escapeHtml(entry.event)}</strong><p>${escapeHtml(entry.detail || "—")}</p></div></article>`).join("") : "<p class=\"log-empty\">No events yet. Saving a reading will start the log.</p>"}</section></main>${bottomNavigationMarkup()}`;
+  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<button class="topbar-action" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear</button></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-inline-controls" aria-label="Reading settings"><div class="settings-inline-group"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-inline-group"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="font-size-slider"><span aria-hidden="true">A</span><input data-font-size-range type="range" min="14" max="24" step="1" value="${state.settings.fontSize}" aria-label="Reading size" /><span class="font-size-slider__large" aria-hidden="true">A</span></div></div><div class="settings-inline-group"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button><button class="theme-choice ${state.settings.theme === "sepia" ? "is-active" : ""}" data-action="set-theme" data-theme="sepia"><span class="theme-swatch theme-swatch--sepia"></span><span>Sepia</span></button></div></div></section><section class="settings-diagnostics"><div class="settings-diagnostics__heading"><p>Diagnostics</p><h2>System activity</h2></div><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>${escapeHtml(nativeStatus)}</strong><small>${state.articles.length} saved articles · ${state.logs.length} events</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Copy diagnostic log</strong><small>Paste it here whenever something feels off.</small></span>${icon("chevron", 18)}</button><button class="settings-clear-button" data-action="clear-data">Clear local library</button><section class="log-feed" aria-live="polite"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><span>${state.logs.length}</span></div>${state.logs.length ? state.logs.map((entry) => `<article class="log-row"><time>${formatClock(entry.time)}</time><div><strong>${escapeHtml(entry.event)}</strong><p>${escapeHtml(entry.detail || "—")}</p></div></article>`).join("") : "<p class=\"log-empty\">No events yet. Saving a reading will start the log.</p>"}</section></main>${bottomNavigationMarkup()}`;
 }
 
 function articleContentMarkup(content = "", baseUrl = "") {
@@ -435,7 +455,7 @@ function readerMarkup() {
   if (!article) return libraryMarkup();
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
   const content = articleContentMarkup(article.content, article.url);
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><div class="reader-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.articleProgress}" style="--progress:${state.articleProgress}%"></div><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool reader-tool--font" data-action="open-settings" aria-label="Reading settings"><span aria-hidden="true">Aa</span></button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -444,7 +464,7 @@ function fontOptionsMarkup() {
 
 function settingsMarkup() {
   if (!state.settingsOpen) return "";
-  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Set the pace.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header><div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-section"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="type-scale-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" aria-label="Decrease reading size" ${state.settings.fontSize <= 16 ? "disabled" : ""}>A−</button><p>Comfortable reading</p><button class="type-scale-button" data-action="change-size" data-delta="1" aria-label="Increase reading size" ${state.settings.fontSize >= 26 ? "disabled" : ""}>A+</button></div></div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button><button class="theme-choice ${state.settings.theme === "sepia" ? "is-active" : ""}" data-action="set-theme" data-theme="sepia"><span class="theme-swatch theme-swatch--sepia"></span><span>Sepia</span></button></div></div></section>`;
+  return `<div class="sheet-backdrop" data-action="close-settings" aria-hidden="true"></div><section class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet-handle"></div><header class="sheet-header"><div><p>Reading preferences</p><h2 id="settings-title">Set the pace.</h2></div><button class="sheet-close" data-action="close-settings">Done</button></header><div class="settings-section"><p class="setting-label">Typeface</p><div class="font-chip-grid">${fontOptionsMarkup()}</div></div><div class="settings-section"><div class="setting-label-row"><p class="setting-label">Text size</p><span data-setting-size>${state.settings.fontSize}px</span></div><div class="font-size-slider"><span aria-hidden="true">A</span><input data-font-size-range type="range" min="14" max="24" step="1" value="${state.settings.fontSize}" aria-label="Reading size" /><span class="font-size-slider__large" aria-hidden="true">A</span></div></div><div class="settings-section"><p class="setting-label">Theme</p><div class="theme-choice-grid"><button class="theme-choice ${state.settings.theme === "light" ? "is-active" : ""}" data-action="set-theme" data-theme="light">${icon("sun", 17)}<span>Light</span></button><button class="theme-choice ${state.settings.theme === "dark" ? "is-active" : ""}" data-action="set-theme" data-theme="dark">${icon("moon", 17)}<span>Dark</span></button><button class="theme-choice ${state.settings.theme === "sepia" ? "is-active" : ""}" data-action="set-theme" data-theme="sepia"><span class="theme-swatch theme-swatch--sepia"></span><span>Sepia</span></button></div></div></section>`;
 }
 
 function toastMarkup() {
@@ -454,7 +474,7 @@ function toastMarkup() {
 
 function render() {
   const root = document.querySelector("#root");
-  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "debug" ? debugMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
+  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
   applySettings();
   if (state.article) requestAnimationFrame(() => {
     const surface = document.querySelector(".reader-scroll-surface");
@@ -574,7 +594,7 @@ function resetSwipeGesture() {
 }
 
 function buildLogExport() {
-  return `WHITEMINT DIAGNOSTIC LOG\n${"=".repeat(27)}\n${JSON.stringify({ app: "whitemint", exportedAt: new Date().toISOString(), platform: Capacitor.getPlatform(), nativeTransport: Capacitor.isNativePlatform(), savedArticleCount: state.articles.length, settings: state.settings, events: state.logs }, null, 2)}`;
+  return `HUUSH DIAGNOSTIC LOG\n${"=".repeat(24)}\n${JSON.stringify({ app: "huush", exportedAt: new Date().toISOString(), platform: Capacitor.getPlatform(), nativeTransport: Capacitor.isNativePlatform(), savedArticleCount: state.articles.length, settings: state.settings, events: state.logs }, null, 2)}`;
 }
 
 async function copyText(text) {
@@ -609,6 +629,7 @@ function navigateBack() {
     invalidateSmryRequest();
     state.article = null;
     state.articleScrollTop = 0;
+    state.articleProgress = 0;
     readerLastScrollTop = 0;
     state.readerToolbarHidden = false;
     state.activeTab = "library";
@@ -637,15 +658,28 @@ async function handleAction(target) {
     render();
     return;
   }
-  if (action === "show-debug") {
+  if (action === "show-tags") {
     invalidateSmryRequest();
-    state.activeTab = "debug";
+    state.activeTab = "tags";
     state.article = null;
     state.captureOpen = false;
+    state.settingsOpen = false;
     state.focusMode = false;
     state.readerToolbarHidden = false;
     readerLastScrollTop = 0;
-    log("debug.opened", "User opened diagnostics");
+    render();
+    return;
+  }
+  if (action === "show-settings" || action === "show-debug") {
+    invalidateSmryRequest();
+    state.activeTab = "settings";
+    state.article = null;
+    state.captureOpen = false;
+    state.settingsOpen = false;
+    state.focusMode = false;
+    state.readerToolbarHidden = false;
+    readerLastScrollTop = 0;
+    log("settings.opened", "User opened settings");
     return;
   }
   if (action === "open-capture") {
@@ -659,7 +693,8 @@ async function handleAction(target) {
     render();
     return;
   }
-  if (action === "set-collection") { state.activeCollectionId = target.dataset.collectionId || "all"; render(); return; }
+  if (action === "set-collection") { state.activeCollectionId = target.dataset.collectionId || "all"; state.activeTab = "library"; render(); return; }
+  if (action === "open-tag") { state.activeCollectionId = target.dataset.collectionId || "all"; state.activeTab = "library"; render(); return; }
   if (action === "manage-collections") { state.collectionSheet = { type: "manage" }; render(); return; }
   if (action === "rename-collection") { const item = state.collections.find((entry) => entry.id === target.dataset.id); const input = target.closest(".collection-management-row")?.querySelector("[data-rename-collection]"); const name = input?.value.trim().slice(0, 60); if (!item || !name) return; if (state.collections.some((entry) => entry.id !== item.id && entry.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } item.name = name; await storage.set(KEYS.collections, state.collections); render(); return; }
   if (action === "delete-collection") { const id = target.dataset.id; const item = state.collections.find((entry) => entry.id === id); if (!item) return; if (!window.confirm(`Delete the “${item.name}” collection? Articles will be kept.`)) return; const articles = await listArticles(); await Promise.all(articles.filter((article) => article.collectionIds?.includes(id)).map((article) => setArticleCollections(article.id, article.collectionIds.filter((entry) => entry !== id)))); state.collections = state.collections.filter((entry) => entry.id !== id); if (state.activeCollectionId === id) state.activeCollectionId = "all"; state.articles = await listArticles(); if (state.article) state.article = state.articles.find((article) => article.id === state.article.id) || state.article; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
@@ -673,6 +708,7 @@ async function handleAction(target) {
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
     state.collectionSheet = null;
     state.articleScrollTop = 0;
+    state.articleProgress = 0;
     readerLastScrollTop = 0;
     state.readerToolbarHidden = false;
     state.focusMode = false;
@@ -686,6 +722,20 @@ async function handleAction(target) {
   }
   if (action === "undo-delete") {
     await undoDelete();
+    return;
+  }
+  if (action === "clear-data") {
+    if (!window.confirm("Clear all saved articles, collections, and diagnostics from this device?")) return;
+    await Promise.all(state.articles.map((article) => removeArticle(article.id)));
+    state.articles = [];
+    state.collections = [];
+    state.activeCollectionId = "all";
+    state.searchQuery = "";
+    state.logs = [];
+    state.pendingDelete = null;
+    await storage.set(KEYS.collections, []);
+    await storage.set(KEYS.logs, []);
+    showToast("Local library cleared.", "success");
     return;
   }
   if (action === "back-library") return navigateBack();
@@ -706,7 +756,7 @@ async function handleAction(target) {
     return;
   }
   if (action === "change-size") {
-    state.settings.fontSize = Math.min(26, Math.max(16, state.settings.fontSize + Number(target.dataset.delta)));
+    state.settings.fontSize = Math.min(24, Math.max(14, state.settings.fontSize + Number(target.dataset.delta)));
     await persistSettings();
     return;
   }
@@ -779,10 +829,35 @@ window.visualViewport?.addEventListener("resize", () => {
 });
 
 document.addEventListener("submit", (event) => {
-  if (event.target.matches("#capture-form")) {
+  if (event.target.matches("#capture-form, #home-capture-form")) {
     event.preventDefault();
     void handleExtract(event.target);
   }
+});
+
+document.addEventListener("input", (event) => {
+  if (!(event.target instanceof HTMLInputElement)) return;
+  if (event.target.matches("[data-search-articles]")) {
+    state.searchQuery = event.target.value;
+    render();
+    requestAnimationFrame(() => {
+      const field = document.querySelector("[data-search-articles]");
+      if (field) {
+        field.focus();
+        field.setSelectionRange(state.searchQuery.length, state.searchQuery.length);
+      }
+    });
+    return;
+  }
+  if (event.target.matches("[data-font-size-range]")) {
+    state.settings.fontSize = Math.min(24, Math.max(14, Number(event.target.value)));
+    applySettings();
+    syncPreferenceControls();
+  }
+});
+
+document.addEventListener("change", (event) => {
+  if (event.target instanceof HTMLInputElement && event.target.matches("[data-font-size-range]")) void persistSettings();
 });
 
 document.addEventListener("scroll", (event) => {
