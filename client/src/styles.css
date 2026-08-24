@@ -794,3 +794,24 @@ body,button,input,textarea,select,label,nav{font-family:var(--font-ui)}
 [data-reading-font="merriweather"] .article-reading h1,[data-reading-font="merriweather"] .article-reading h2,[data-reading-font="merriweather"] .article-reading h3,[data-reading-font="merriweather"] .article-reading h4{line-height:1.3}
 [data-reading-font="literata"] .article-reading__body,[data-reading-font="literata"] .reading-preview-card__sample{line-height:1.7}
 [data-reading-font="literata"] .article-reading h1,[data-reading-font="literata"] .article-reading h2,[data-reading-font="literata"] .article-reading h3,[data-reading-font="literata"] .article-reading h4{line-height:1.25}
+
+
+/* Library hero copy is text only: never paint the headline or its span as a bar. */
+.editorial-library .daily-brief--clean h1,
+.editorial-library .daily-brief--clean h1 span,
+.editorial-library .daily-brief--clean h1 em,
+.editorial-library .daily-brief--clean h1 .accent{
+  background-color:transparent !important;
+  background-image:none !important;
+  color:var(--ink) !important;
+}
+.editorial-library .daily-brief--clean h1::before,
+.editorial-library .daily-brief--clean h1::after,
+.editorial-library .daily-brief--clean h1 span::before,
+.editorial-library .daily-brief--clean h1 span::after,
+.editorial-library .daily-brief--clean h1 em::before,
+.editorial-library .daily-brief--clean h1 em::after{
+  display:none !important;
+  content:none !important;
+  background:transparent !important;
+}
