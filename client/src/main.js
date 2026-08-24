@@ -19,7 +19,8 @@ import { initAdaptiveLayout } from "./lib/adaptive-layout.js";
 globalThis.Readability = Readability;
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs", collections: "whitemint:collections" };
-const LIMITS = { logs: 160 };
+const LIMITS = { logs: 160, diagnostics: 50 };
+const IGNORED_LOG_EVENTS = new Set(["status-bar.state", "log.scrolled", "settings.rendered", "diagnostics.opened", "diagnostics.scrolled"]);
 const DEFAULT_SETTINGS = { theme: "light", font: "inter", fontSize: 18, readerLineHeight: 1.6, readerTitleLineHeight: 1.2 };
 const FONTS = [
   { id: "inter", label: "Inter", family: "var(--font-reading-inter)", bodyLineHeight: 1.6, titleLineHeight: 1.2, serif: false },
@@ -77,6 +78,7 @@ const state = {
   pendingDelete: null,
   loggedImageUrls: new Set(),
   diagnosticsOpen: false,
+  diagnosticsSnapshot: [],
   confirmClear: false,
   viewTransition: "",
 };
@@ -158,7 +160,7 @@ const storage = {
 };
 
 function log(event, detail = "", { refreshDebug = true } = {}) {
-  if (event === "status-bar.state") return;
+  if (IGNORED_LOG_EVENTS.has(event)) return;
   const entry = { time: new Date().toISOString(), event, detail: typeof detail === "string" ? detail : JSON.stringify(detail) };
   state.logs = [entry, ...state.logs].slice(0, LIMITS.logs);
   void storage.set(KEYS.logs, state.logs);
@@ -604,10 +606,22 @@ function logGroupLabel(value) {
   return difference === 0 ? "Today" : difference === 1 ? "Yesterday" : "Earlier";
 }
 
-function eventLogMarkup() {
-  if (!state.logs.length) return '<p class="log-empty">No events yet. Saving a reading will start the log.</p>';
-  const groups = ["Today", "Yesterday", "Earlier"].map((label) => ({ label, entries: state.logs.filter((entry) => logGroupLabel(entry.time) === label) })).filter((group) => group.entries.length);
-  return groups.map((group) => `<section class="log-group" aria-labelledby="log-group-${group.label.toLowerCase()}"><h3 id="log-group-${group.label.toLowerCase()}">${group.label}</h3>${group.entries.map((entry) => `<article class="log-row"><time datetime="${escapeHtml(entry.time)}">${escapeHtml(relativeTime(entry.time))}<small>${escapeHtml(formatClock(entry.time))}</small></time><div><strong>${escapeHtml(logEventLabel(entry.event))}</strong><p>${escapeHtml(logEventDetails(entry))}</p></div></article>`).join("")}</section>`).join("");
+function snapshotDiagnosticsLogs(entries = state.logs) {
+  return entries.slice(0, LIMITS.diagnostics).map((entry) => ({
+    ...entry,
+    key: `${entry.time || "unknown"}-${entry.event || "event"}`,
+    timeLabel: relativeTime(entry.time),
+    clockLabel: formatClock(entry.time),
+    groupLabel: logGroupLabel(entry.time),
+    eventLabel: logEventLabel(entry.event),
+    detailLabel: logEventDetails(entry),
+  }));
+}
+
+function eventLogMarkup(entries = state.diagnosticsSnapshot) {
+  if (!entries.length) return '<p class="log-empty">No events yet. Saving a reading will start the log.</p>';
+  const groups = ["Today", "Yesterday", "Earlier"].map((label) => ({ label, entries: entries.filter((entry) => entry.groupLabel === label) })).filter((group) => group.entries.length);
+  return groups.map((group) => `<section class="log-group" aria-labelledby="log-group-${group.label.toLowerCase()}"><h3 id="log-group-${group.label.toLowerCase()}">${group.label}</h3>${group.entries.map((entry) => `<article class="log-row" data-log-entry="${escapeHtml(entry.key)}"><time datetime="${escapeHtml(entry.time)}">${escapeHtml(entry.timeLabel)}<small>${escapeHtml(entry.clockLabel)}</small></time><div><strong>${escapeHtml(entry.eventLabel)}</strong><p>${escapeHtml(entry.detailLabel)}</p></div></article>`).join("")}</section>`).join("");
 }
 
 function refreshDiagnosticsOnly() {
@@ -615,9 +629,6 @@ function refreshDiagnosticsOnly() {
   if (!content) return;
   const status = content.querySelector(".debug-status-card small");
   if (status) status.textContent = `All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.`;
-  const feed = content.querySelector(".log-feed");
-  if (!feed) return;
-  feed.innerHTML = `<div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><button class="log-clear-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear log</button></div>${eventLogMarkup()}`;
 }
 
 function settingsPreviewMarkup() {
@@ -639,7 +650,7 @@ function themeOptionsMarkup() {
 }
 
 function settingsPageMarkup() {
-  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<span class="topbar-spacer" aria-hidden="true"></span></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-section-block settings-reading" aria-labelledby="reading-settings-title"><div class="settings-section-heading"><p>Reading</p><h2 id="reading-settings-title">Make it yours.</h2></div>${settingsPreviewMarkup()}<div class="settings-control-group"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-control-group">${sizeControlMarkup()}</div><div class="settings-control-group"><div class="settings-control-heading"><p class="setting-label">Theme</p><span class="settings-control-hint">${escapeHtml(themeLabel())}</span></div><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section><section class="settings-section-block settings-general" aria-labelledby="general-settings-title"><div class="settings-section-heading"><p>General</p><h2 id="general-settings-title">A little housekeeping.</h2></div><div class="settings-info-list"><div class="settings-info-row"><span class="settings-info-row__icon">${icon("archive", 19)}</span><span><strong>Storage</strong><small>${state.articles.length} ${state.articles.length === 1 ? "article" : "articles"} saved privately on this device.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("settings", 19)}</span><span><strong>Notifications</strong><small>Not configured. Huush stays quiet until you ask it to.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("chevron", 19)}</span><span><strong>Advanced</strong><small>Technical activity is tucked away below.</small></span></div></div><button class="settings-clear-button settings-clear-button--destructive" data-action="clear-data">Clear local library</button></section><section class="settings-section-block settings-diagnostics" aria-labelledby="diagnostics-title"><button class="settings-disclosure" data-action="toggle-diagnostics" aria-expanded="${state.diagnosticsOpen ? "true" : "false"}" aria-controls="diagnostics-content"><span><p>Diagnostics</p><strong id="diagnostics-title">System activity</strong></span><span class="settings-disclosure__chevron ${state.diagnosticsOpen ? "is-open" : ""}">${icon("chevron", 19)}</span></button>${state.diagnosticsOpen ? `<div id="diagnostics-content" class="settings-diagnostics__content"><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>Sync status</strong><small>All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Share debug info</strong><small>Export readable technical details when something feels off.</small></span>${icon("chevron", 18)}</button><section class="log-feed" aria-live="polite"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><button class="log-clear-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear log</button></div>${eventLogMarkup()}</section></div>` : ""}</section></main>${bottomNavigationMarkup()}${state.confirmClear ? clearDataConfirmMarkup() : ""}`;
+  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<span class="topbar-spacer" aria-hidden="true"></span></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-section-block settings-reading" aria-labelledby="reading-settings-title"><div class="settings-section-heading"><p>Reading</p><h2 id="reading-settings-title">Make it yours.</h2></div>${settingsPreviewMarkup()}<div class="settings-control-group"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-control-group">${sizeControlMarkup()}</div><div class="settings-control-group"><div class="settings-control-heading"><p class="setting-label">Theme</p><span class="settings-control-hint">${escapeHtml(themeLabel())}</span></div><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section><section class="settings-section-block settings-general" aria-labelledby="general-settings-title"><div class="settings-section-heading"><p>General</p><h2 id="general-settings-title">A little housekeeping.</h2></div><div class="settings-info-list"><div class="settings-info-row"><span class="settings-info-row__icon">${icon("archive", 19)}</span><span><strong>Storage</strong><small>${state.articles.length} ${state.articles.length === 1 ? "article" : "articles"} saved privately on this device.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("settings", 19)}</span><span><strong>Notifications</strong><small>Not configured. Huush stays quiet until you ask it to.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("chevron", 19)}</span><span><strong>Advanced</strong><small>Technical activity is tucked away below.</small></span></div></div><button class="settings-clear-button settings-clear-button--destructive" data-action="clear-data">Clear local library</button></section><section class="settings-section-block settings-diagnostics" aria-labelledby="diagnostics-title"><button class="settings-disclosure" data-action="toggle-diagnostics" aria-expanded="${state.diagnosticsOpen ? "true" : "false"}" aria-controls="diagnostics-content"><span><p>Diagnostics</p><strong id="diagnostics-title">System activity</strong></span><span class="settings-disclosure__chevron ${state.diagnosticsOpen ? "is-open" : ""}">${icon("chevron", 19)}</span></button>${state.diagnosticsOpen ? `<div id="diagnostics-content" class="settings-diagnostics__content"><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>Sync status</strong><small>All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Share debug info</strong><small>Export readable technical details when something feels off.</small></span>${icon("chevron", 18)}</button><section class="log-feed"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><button class="log-clear-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear log</button></div><div class="event-log-container" aria-live="off">${eventLogMarkup(state.diagnosticsSnapshot)}</div></section></div>` : ""}</section></main>${bottomNavigationMarkup()}${state.confirmClear ? clearDataConfirmMarkup() : ""}`;
 }
 
 function articleContentMarkup(content = "", baseUrl = "") {
@@ -942,6 +953,7 @@ async function handleAction(target) {
     state.focusMode = false;
     state.readerToolbarHidden = false;
     state.diagnosticsOpen = false;
+    state.diagnosticsSnapshot = [];
     state.confirmClear = false;
     readerLastScrollTop = 0;
     log("settings.opened", "User opened settings", { refreshDebug: false });
@@ -1061,6 +1073,7 @@ async function handleAction(target) {
   }
   if (action === "toggle-diagnostics") {
     state.diagnosticsOpen = !state.diagnosticsOpen;
+    state.diagnosticsSnapshot = state.diagnosticsOpen ? snapshotDiagnosticsLogs(state.logs) : [];
     render();
     return;
   }
@@ -1092,6 +1105,7 @@ async function handleAction(target) {
   }
   if (action === "clear-logs") {
     state.logs = [];
+    state.diagnosticsSnapshot = [];
     await storage.set(KEYS.logs, []);
     showToast("Event log cleared.");
     return;
