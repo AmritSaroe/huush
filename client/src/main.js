@@ -5,6 +5,8 @@
 import "./styles.css";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
+import { Share } from "@capacitor/share";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Preferences } from "@capacitor/preferences";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { Readability } from "@mozilla/readability";
@@ -13,14 +15,14 @@ import { extractSmryArticle, getSmryReaderUrl } from "./lib/smry.js";
 import { sanitizeContent } from "./lib/article-sanitizer.js";
 import { listArticles, migrateLegacyArticles, removeArticle, restoreArticle, saveArticle as storeSaveArticle, setArticleCollections } from "./lib/article-store.js";
 import { initAdaptiveLayout } from "./lib/adaptive-layout.js";
+import logger, { APP_VERSION } from "./lib/logger.js";
 
 // fetcher_fixed.js is intentionally kept as the supplied browser module; expose
 // the installed Readability implementation for its existing global reference.
 globalThis.Readability = Readability;
 
-const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs", collections: "whitemint:collections" };
-const LIMITS = { logs: 160, diagnostics: 50 };
-const IGNORED_LOG_EVENTS = new Set(["status-bar.state", "log.scrolled", "settings.rendered", "diagnostics.opened", "diagnostics.scrolled"]);
+const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", collections: "whitemint:collections" };
+const STORAGE_FLAGS = { developer: "dev_options_enabled" };
 const DEFAULT_SETTINGS = { theme: "light", font: "inter", fontSize: 18, readerLineHeight: 1.6, readerTitleLineHeight: 1.2 };
 const FONTS = [
   { id: "inter", label: "Inter", family: "var(--font-reading-inter)", bodyLineHeight: 1.6, titleLineHeight: 1.2, serif: false },
@@ -77,8 +79,14 @@ const state = {
   toast: null,
   pendingDelete: null,
   loggedImageUrls: new Set(),
-  diagnosticsOpen: false,
-  diagnosticsSnapshot: [],
+  developerOptionsEnabled: false,
+  developerLoggingEnabled: true,
+  developerVerboseLogging: false,
+  logViewerOpen: false,
+  logViewerEvents: [],
+  logViewerFilter: "all",
+  logViewerSearch: "",
+  expandedLogKey: "",
   confirmClear: false,
   viewTransition: "",
 };
@@ -90,13 +98,19 @@ let nativeStatusBarColor = "";
 let lastStatusBarConfig = "";
 let pendingStatusBarConfig = null;
 let nativeStatusBarSyncPromise = null;
-let settingsLogTimeout = 0;
 let settingsInteractionUnlockTimeout = 0;
+let screenEnteredAt = Date.now();
+let lastPauseAt = 0;
+let searchLogTimeout = 0;
 let settingsInteractionLocked = false;
 let readerLastScrollTop = 0;
 let fontSizeUpdateFrame = 0;
 let lastPersistedFontSize = DEFAULT_SETTINGS.fontSize;
 let sliderInteractionDirty = false;
+let lastReaderScrollMilestone = 0;
+let readerOpenedAt = 0;
+let versionTapCount = 0;
+let lastVersionTapAt = 0;
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
   const preferredSize = Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
@@ -159,19 +173,52 @@ const storage = {
   },
 };
 
-function log(event, detail = "", { refreshDebug = true } = {}) {
-  if (IGNORED_LOG_EVENTS.has(event)) return;
-  const entry = { time: new Date().toISOString(), event, detail: typeof detail === "string" ? detail : JSON.stringify(detail) };
-  state.logs = [entry, ...state.logs].slice(0, LIMITS.logs);
-  void storage.set(KEYS.logs, state.logs);
-  if (refreshDebug && state.activeTab === "settings" && !state.article && state.diagnosticsOpen) refreshDiagnosticsOnly();
+function log(event, detail = {}, level = "info") {
+  return logger.log(event, detail, level);
 }
 
-function queueSettingsLog() {
-  window.clearTimeout(settingsLogTimeout);
-  settingsLogTimeout = window.setTimeout(() => {
-    log("settings.updated", state.settings, { refreshDebug: false });
-  }, 500);
+function currentScreenName() {
+  if (state.logViewerOpen) return "developer-logs";
+  if (state.article) return "reader";
+  return state.activeTab;
+}
+
+function logScreenChange(to, trigger = "tap") {
+  const from = document.documentElement.dataset.huushScreen || currentScreenName();
+  if (from === to) return;
+  const durationMs = Math.max(0, Date.now() - screenEnteredAt);
+  logger.log("screen.time", { screen: from, durationMs });
+  logger.log("navigate", { from, to, trigger });
+  screenEnteredAt = Date.now();
+  document.documentElement.dataset.huushScreen = to;
+}
+
+function logSettingsChanged(key, oldValue, newValue) {
+  if (Object.is(oldValue, newValue)) return;
+  logger.log("settings.changed", { key, oldValue, newValue });
+}
+
+function readLocalFlag(key, fallback = false) {
+  try { return window.localStorage.getItem(key) === "true" || (window.localStorage.getItem(key) === null && fallback); } catch { return fallback; }
+}
+
+function logStorageStats() {
+  const payload = JSON.stringify(state.articles);
+  const estimate = navigator.storage?.estimate?.();
+  if (estimate) {
+    void estimate.then(({ quota = 0, usage = 0 }) => logger.log("storage.stats", { articles: state.articles.length, totalBytes: new Blob([payload]).size, freeBytes: Math.max(0, quota - usage) }));
+  } else {
+    logger.log("storage.stats", { articles: state.articles.length, totalBytes: new Blob([payload]).size, freeBytes: null });
+  }
+}
+
+function logMemoryWarningIfAvailable() {
+  const memory = performance.memory;
+  if (memory && memory.usedJSHeapSize > memory.jsHeapSizeLimit * 0.8) logger.log("memory.warning", { usedJSHeapSize: memory.usedJSHeapSize }, "warn");
+}
+
+function logCapacitorError(plugin, method, error) {
+  logger.log("error.capacitor", { plugin, method, error: error instanceof Error ? error.message : String(error) }, "error");
 }
 
 function beginSettingsInteraction() {
@@ -249,7 +296,7 @@ function syncNativeStatusBar() {
       }
     } catch (error) {
       lastStatusBarConfig = "";
-      log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable", { refreshDebug: false });
+      logCapacitorError("StatusBar", "sync", error);
     } finally {
       nativeStatusBarSyncPromise = null;
       if (pendingStatusBarConfig) syncNativeStatusBar();
@@ -339,7 +386,6 @@ async function persistSettings() {
   syncPreferenceControls();
   await storage.set(KEYS.settings, state.settings);
   lastPersistedFontSize = state.settings.fontSize;
-  queueSettingsLog();
 }
 
 function queueFontSizePreview(value) {
@@ -413,6 +459,11 @@ function handleReaderScroll(surface) {
       state.articleScrollTop = scrollTop;
     state.articleProgress = maxScrollTop ? Math.min(100, Math.round((scrollTop / maxScrollTop) * 100)) : 0;
     document.querySelector(".reader-progress")?.style.setProperty("--progress", `${state.articleProgress}%`);
+    const milestone = Math.min(4, Math.floor(state.articleProgress / 25));
+    if (state.article && milestone > lastReaderScrollMilestone) {
+      lastReaderScrollMilestone = milestone;
+      logger.log("article.scroll", { id: state.article.id, depthPercent: milestone * 25, timeSpentMs: Math.max(0, Date.now() - readerOpenedAt) });
+    }
     if (scrollTop <= 18 || nearArticleEnd) setReaderToolbarHidden(false);
   else if (delta > 5) setReaderToolbarHidden(true);
   else if (delta < -5) setReaderToolbarHidden(false);
@@ -442,14 +493,6 @@ async function saveArticle(article) {
   state.articles = await listArticles();
   const savedCollections = await storage.get(KEYS.collections, []);
   state.collections = Array.isArray(savedCollections) ? savedCollections.filter((item) => item?.id && item.id !== "inbox" && item.name?.trim()).map((item) => ({ id: item.id, name: item.name.trim().slice(0, 60) })) : [];
-  log("article.saved", {
-    source: article.source,
-    title: article.title.slice(0, 80),
-    strategy: article.strategy || "unknown",
-    score: article.score ?? null,
-    characters: article.textContent?.length || stripHtml(article.content || "").length,
-    previewOnly: Boolean(article.previewOnly),
-  });
   return state.articles.find((item) => item.id === saved.id) || saved;
 }
 
@@ -568,67 +611,42 @@ function relativeTime(value) {
 }
 
 function logEventLabel(event = "") {
-  return {
-    "status-bar.state": "Status bar updated",
-    "settings.opened": "Settings opened",
-    "settings.updated": "Reading preferences updated",
-    "article.saved": "Article saved",
-    "article.opened": "Article opened",
-    "article.image.loaded": "Article image loaded",
-    "fetch.transport": "Article fetch started",
-    "fetch.smry.succeeded": "Backup extraction completed",
-    "fetch.smry.started": "Backup extraction started",
-    "fetch.failed": "Article fetch failed",
-    "source.copied": "Source link copied",
-    "debug.copied": "Debug information exported",
-  }[event] || event.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return { "app.launch": "App launched", "app.resume": "App resumed", "app.pause": "App paused", "app.crash": "App crash captured", "settings.changed": "Setting changed", "article.save.start": "Article save started", "article.save.success": "Article saved", "article.save.fail": "Article save failed", "article.open": "Article opened", "article.delete": "Article deleted", "article.scroll": "Article progress", "error.js": "JavaScript error", "error.promise": "Unhandled promise", "error.capacitor": "Native plugin error", "network.status": "Network status", "storage.stats": "Storage statistics", "memory.warning": "Memory warning", "render.jank": "Render jank" }[event] || event.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function logEventDetails(entry) {
-  const raw = String(entry.detail || "").trim();
-  if (!raw) return "No additional details";
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      return Object.entries(parsed).map(([key, value]) => `${key.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}: ${typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}`).join(" · ");
-    }
-  } catch {
-    // Plain-text event details are already suitable for display.
-  }
-  return raw;
+function logLevelClass(level = "info") {
+  return ["debug", "info", "warn", "error"].includes(level) ? level : "info";
 }
 
-function logGroupLabel(value) {
-  const date = new Date(value);
-  const now = new Date();
-  const start = (item) => new Date(item.getFullYear(), item.getMonth(), item.getDate()).getTime();
-  const difference = Math.round((start(now) - start(date)) / 86400000);
-  return difference === 0 ? "Today" : difference === 1 ? "Yesterday" : "Earlier";
+function formatLogDetail(detail) {
+  if (detail === null || detail === undefined || detail === "") return "{}";
+  if (typeof detail === "string") return detail;
+  try { return JSON.stringify(detail, null, 2); } catch { return String(detail); }
 }
 
-function snapshotDiagnosticsLogs(entries = state.logs) {
-  return entries.slice(0, LIMITS.diagnostics).map((entry) => ({
-    ...entry,
-    key: `${entry.time || "unknown"}-${entry.event || "event"}`,
-    timeLabel: relativeTime(entry.time),
-    clockLabel: formatClock(entry.time),
-    groupLabel: logGroupLabel(entry.time),
-    eventLabel: logEventLabel(entry.event),
-    detailLabel: logEventDetails(entry),
-  }));
+function filteredLogEvents() {
+  const query = state.logViewerSearch.trim().toLowerCase();
+  return state.logViewerEvents.filter((entry) => {
+    if (state.logViewerFilter !== "all" && entry.level !== state.logViewerFilter) return false;
+    return !query || String(entry.event).toLowerCase().includes(query) || formatLogDetail(entry.detail).toLowerCase().includes(query);
+  });
 }
 
-function eventLogMarkup(entries = state.diagnosticsSnapshot) {
-  if (!entries.length) return '<p class="log-empty">No events yet. Saving a reading will start the log.</p>';
-  const groups = ["Today", "Yesterday", "Earlier"].map((label) => ({ label, entries: entries.filter((entry) => entry.groupLabel === label) })).filter((group) => group.entries.length);
-  return groups.map((group) => `<section class="log-group" aria-labelledby="log-group-${group.label.toLowerCase()}"><h3 id="log-group-${group.label.toLowerCase()}">${group.label}</h3>${group.entries.map((entry) => `<article class="log-row" data-log-entry="${escapeHtml(entry.key)}"><time datetime="${escapeHtml(entry.time)}">${escapeHtml(entry.timeLabel)}<small>${escapeHtml(entry.clockLabel)}</small></time><div><strong>${escapeHtml(entry.eventLabel)}</strong><p>${escapeHtml(entry.detailLabel)}</p></div></article>`).join("")}</section>`).join("");
+function logRowMarkup(entry, index) {
+  const key = `${entry.time || "unknown"}-${entry.event || "event"}-${index}`;
+  const expanded = state.expandedLogKey === key;
+  return `<article class="developer-log-row ${expanded ? "is-expanded" : ""}" data-action="toggle-log-entry" data-log-key="${escapeHtml(key)}"><div class="developer-log-row__header"><time>${escapeHtml(formatClock(entry.time))}</time><span class="developer-log-row__level developer-log-row__level--${logLevelClass(entry.level)}">${escapeHtml(entry.level || "info")}</span><strong>${escapeHtml(entry.event || "unknown.event")}</strong><span class="developer-log-row__chevron">${icon("chevron", 17)}</span></div>${expanded ? `<pre class="developer-log-row__detail">${escapeHtml(formatLogDetail(entry.detail))}</pre>` : ""}</article>`;
 }
 
-function refreshDiagnosticsOnly() {
-  const content = document.querySelector("#diagnostics-content");
-  if (!content) return;
-  const status = content.querySelector(".debug-status-card small");
-  if (status) status.textContent = `All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.`;
+function developerOptionsMarkup() {
+  if (!state.developerOptionsEnabled) return "";
+  return `<section class="settings-section-block developer-options" aria-labelledby="developer-options-title"><div class="settings-section-heading"><p>Developer</p><h2 id="developer-options-title">Developer options.</h2></div><div class="developer-options__list"><button class="developer-option-row" data-action="toggle-developer-logging" aria-pressed="${state.developerLoggingEnabled}"><span><strong>Logging enabled</strong><small>Keep diagnostic events on for troubleshooting.</small></span><b class="developer-toggle ${state.developerLoggingEnabled ? "is-on" : ""}">${state.developerLoggingEnabled ? "On" : "Off"}</b></button><button class="developer-option-row" data-action="toggle-developer-verbose" aria-pressed="${state.developerVerboseLogging}"><span><strong>Verbose logging</strong><small>Includes performance events and may impact performance.</small></span><b class="developer-toggle ${state.developerVerboseLogging ? "is-on" : ""}">${state.developerVerboseLogging ? "On" : "Off"}</b></button><button class="developer-option-row" data-action="open-log-viewer"><span><strong>View event log</strong><small>Search, filter, expand, and inspect the last 200 events.</small></span>${icon("chevron", 18)}</button><button class="developer-option-row" data-action="export-logs"><span><strong>Export logs</strong><small>Share a diagnostic JSON file only when you choose.</small></span>${icon("chevron", 18)}</button><button class="developer-option-row" data-action="clear-developer-logs"><span><strong>Clear logs</strong><small>Delete the diagnostic history without clearing articles.</small></span>${icon("trash", 18)}</button><button class="developer-option-row" data-action="simulate-error"><span><strong>Simulate error</strong><small>Generate a harmless test error for verification.</small></span>${icon("terminal", 18)}</button><button class="developer-option-row" data-action="reset-developer-options"><span><strong>Reset developer options</strong><small>Hide this section again without deleting logs.</small></span>${icon("chevron", 18)}</button><button class="developer-option-row" data-action="reset-settings"><span><strong>Reset reading defaults</strong><small>Restore Inter, 18px, and the light theme.</small></span>${icon("chevron", 18)}</button></div></section>`;
+}
+
+function logViewerMarkup() {
+  const filtered = filteredLogEvents();
+  const filters = ["all", "error", "warn", "info"];
+  return `<main class="dashboard-screen log-viewer-screen"><header class="dashboard-topbar log-viewer-screen__header"><button class="profile-tile" data-action="close-log-viewer" aria-label="Back to developer options">${icon("arrowLeft", 22)}</button><div class="log-viewer-screen__title"><p>Developer options</p><h1>Event log</h1></div><span class="log-viewer-screen__count">${filtered.length}</span></header><div class="log-viewer-filters" role="toolbar" aria-label="Log filters">${filters.map((filter) => `<button class="log-filter-chip ${state.logViewerFilter === filter ? "is-active" : ""}" data-action="filter-logs" data-filter="${filter}">${filter[0].toUpperCase() + filter.slice(1)}</button>`).join("")}</div><label class="log-viewer-search">${icon("search", 17)}<span class="sr-only">Search events</span><input data-log-search type="search" value="${escapeHtml(state.logViewerSearch)}" placeholder="Search events..." autocomplete="off" /></label><div class="log-viewer-list">${filtered.length ? filtered.map(logRowMarkup).join("") : '<p class="log-empty">No matching events.</p>'}</div></main>`;
 }
 
 function settingsPreviewMarkup() {
@@ -650,8 +668,8 @@ function themeOptionsMarkup() {
 }
 
 function settingsPageMarkup() {
-  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<span class="topbar-spacer" aria-hidden="true"></span></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-section-block settings-reading" aria-labelledby="reading-settings-title"><div class="settings-section-heading"><p>Reading</p><h2 id="reading-settings-title">Make it yours.</h2></div>${settingsPreviewMarkup()}<div class="settings-control-group"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-control-group">${sizeControlMarkup()}</div><div class="settings-control-group"><div class="settings-control-heading"><p class="setting-label">Theme</p><span class="settings-control-hint">${escapeHtml(themeLabel())}</span></div><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section><section class="settings-section-block settings-general" aria-labelledby="general-settings-title"><div class="settings-section-heading"><p>General</p><h2 id="general-settings-title">A little housekeeping.</h2></div><div class="settings-info-list"><div class="settings-info-row"><span class="settings-info-row__icon">${icon("archive", 19)}</span><span><strong>Storage</strong><small>${state.articles.length} ${state.articles.length === 1 ? "article" : "articles"} saved privately on this device.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("settings", 19)}</span><span><strong>Notifications</strong><small>Not configured. Huush stays quiet until you ask it to.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("chevron", 19)}</span><span><strong>Advanced</strong><small>Technical activity is tucked away below.</small></span></div></div><button class="settings-clear-button settings-clear-button--destructive" data-action="clear-data">Clear local library</button></section><section class="settings-section-block settings-diagnostics" aria-labelledby="diagnostics-title"><button class="settings-disclosure" data-action="toggle-diagnostics" aria-expanded="${state.diagnosticsOpen ? "true" : "false"}" aria-controls="diagnostics-content"><span><p>Diagnostics</p><strong id="diagnostics-title">System activity</strong></span><span class="settings-disclosure__chevron ${state.diagnosticsOpen ? "is-open" : ""}">${icon("chevron", 19)}</span></button>${state.diagnosticsOpen ? `<div id="diagnostics-content" class="settings-diagnostics__content"><section class="debug-status-card"><span class="debug-status-card__icon">${icon("terminal", 23)}</span><div><strong>Sync status</strong><small>All ${state.articles.length} ${state.articles.length === 1 ? "article is" : "articles are"} stored locally on this device.</small></div></section><button class="copy-log-card" data-action="copy-logs">${icon("copy", 20)}<span><strong>Share debug info</strong><small>Export readable technical details when something feels off.</small></span>${icon("chevron", 18)}</button><section class="log-feed"><div class="section-heading"><div><p>Recent activity</p><h2>Event log</h2></div><button class="log-clear-button" data-action="clear-logs" ${state.logs.length ? "" : "disabled"}>Clear log</button></div><div class="event-log-container" aria-live="off">${eventLogMarkup(state.diagnosticsSnapshot)}</div></section></div>` : ""}</section></main>${bottomNavigationMarkup()}${state.confirmClear ? clearDataConfirmMarkup() : ""}`;
-}
+  return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<span class="topbar-spacer" aria-hidden="true"></span></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-section-block settings-reading" aria-labelledby="reading-settings-title"><div class="settings-section-heading"><p>Reading</p><h2 id="reading-settings-title">Make it yours.</h2></div>${settingsPreviewMarkup()}<div class="settings-control-group"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-control-group">${sizeControlMarkup()}</div><div class="settings-control-group"><div class="settings-control-heading"><p class="setting-label">Theme</p><span class="settings-control-hint">${escapeHtml(themeLabel())}</span></div><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section><section class="settings-section-block settings-general" aria-labelledby="general-settings-title"><div class="settings-section-heading"><p>Storage</p><h2 id="general-settings-title">A little housekeeping.</h2></div><div class="settings-info-list"><div class="settings-info-row"><span class="settings-info-row__icon">${icon("archive", 19)}</span><span><strong>Offline storage</strong><small>${state.articles.length} ${state.articles.length === 1 ? "article" : "articles"} saved privately on this device.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("settings", 19)}</span><span><strong>Notifications</strong><small>Not configured. Huush stays quiet until you ask it to.</small></span></div></div><button class="settings-clear-button settings-clear-button--destructive" data-action="clear-data">Clear local library</button></section><section class="settings-section-block settings-about" aria-labelledby="about-settings-title"><div class="settings-section-heading"><p>About</p><h2 id="about-settings-title">Quiet by design.</h2></div><div class="settings-info-list"><button class="about-version-row" data-action="version-tap"><span><strong>App version</strong><small>${APP_VERSION}</small></span></button><button class="about-version-row" data-action="open-licenses"><span><strong>Open source licenses</strong><small>Third-party notices bundled with Huush.</small></span>${icon("chevron", 18)}</button></div></section>${developerOptionsMarkup()}${state.confirmClear ? clearDataConfirmMarkup() : ""}</main>${bottomNavigationMarkup()}`;
+  }
 
 function articleContentMarkup(content = "", baseUrl = "") {
   const template = document.createElement("template");
@@ -727,7 +745,7 @@ function render() {
   const useNativeViewTransition = Boolean(transition && document.startViewTransition && !reducedMotionPreferred());
   const update = () => {
     const shellClass = transition && !useNativeViewTransition ? ` app-shell--view-${transition}` : "";
-    root.innerHTML = `<div class="app-shell${shellClass}">${state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
+    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
     applySettings();
     if (transition) {
       const nextShell = root.querySelector(".app-shell");
@@ -757,11 +775,18 @@ function render() {
 }
 
 async function handleExtractUrl(url) {
+  const startedAt = performance.now();
+  log("article.save.start", { url, source: (() => { try { return new URL(url).hostname.replace(/^www\\./, ""); } catch { return "unknown"; } })() });
+  let saveStage = "fetch";
   state.busy = true;
   render();
   try {
     const article = await extractArticle(url, { log });
+    saveStage = "parse";
     const savedArticle = await saveArticle(article);
+    saveStage = "store";
+    const imageCount = (article.content || "").match(/<img\\b/gi)?.length || 0;
+    log("article.save.success", { url, parseTimeMs: Math.round(performance.now() - startedAt), wordCount: String(article.textContent || stripHtml(article.content || "")).split(/\\s+/).filter(Boolean).length, imageCount });
     state.article = savedArticle;
     state.collectionSheet = { type: "organize", articleId: savedArticle.id };
     state.articleScrollTop = 0;
@@ -772,7 +797,7 @@ async function handleExtractUrl(url) {
     showToast("Saved to your reading shelf.", "success");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown extraction error";
-    log("fetch.failed", `${safeUrlForLog(url)} · ${errorMessage}`);
+    log("article.save.fail", { url, error: errorMessage, stage: saveStage }, "error");
     showToast(error?.code === "section_page" ? "Paste an individual Economic Times article link, not its homepage or section page." : "Couldn’t save this article. Check the diagnostic log if it continues.", "error");
   } finally {
     state.busy = false;
@@ -828,13 +853,13 @@ async function retryWithSmry() {
   }
 }
 
-async function deleteArticle(id) {
+async function deleteArticle(id, trigger = "menu") {
   const index = state.articles.findIndex((article) => article.id === id);
   if (index < 0) return;
   const article = await removeArticle(id);
   state.articles = state.articles.filter((saved) => saved.id !== id);
   state.pendingDelete = { article, index };
-  log("article.deleted", article.title.slice(0, 80));
+  logger.log("article.delete", { id, trigger });
   showToast("Article removed.", "neutral", "undo-delete");
 }
 
@@ -864,7 +889,45 @@ function resetSwipeGesture() {
 }
 
 function buildLogExport() {
-  return `HUUSH DIAGNOSTIC LOG\n${"=".repeat(24)}\n${JSON.stringify({ app: "huush", exportedAt: new Date().toISOString(), platform: Capacitor.getPlatform(), nativeTransport: Capacitor.isNativePlatform(), savedArticleCount: state.articles.length, settings: state.settings, events: state.logs }, null, 2)}`;
+  return JSON.stringify(logger.export(), null, 2);
+}
+
+function diagnosticFilename() {
+  return `huush-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+}
+
+async function exportLogs() {
+  const filename = diagnosticFilename();
+  const data = buildLogExport();
+  if (Capacitor.isNativePlatform()) {
+    await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache, encoding: Encoding.UTF8, recursive: true });
+    const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+    await Share.share({ title: "Huush diagnostics", text: "Huush diagnostic log", url: uri, dialogTitle: "Share Huush diagnostics" });
+    return;
+  }
+  const blob = new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function toggleDeveloperOptions() {
+  state.developerOptionsEnabled = !state.developerOptionsEnabled;
+  try { window.localStorage.setItem(STORAGE_FLAGS.developer, String(state.developerOptionsEnabled)); } catch { /* no-op */ }
+  if (state.developerOptionsEnabled) showToast("Developer options enabled.", "success");
+  else showToast("Developer options hidden.", "neutral");
+}
+
+function resetReadingDefaults() {
+  const previous = { ...state.settings };
+  state.settings = { ...DEFAULT_SETTINGS };
+  Object.keys(DEFAULT_SETTINGS).forEach((key) => logSettingsChanged(key, previous[key], state.settings[key]));
+  void persistSettings();
+  logger.log("settings.reset", {});
+  showToast("Reading defaults restored.", "success");
 }
 
 async function copyText(text) {
@@ -880,6 +943,15 @@ async function copyText(text) {
 }
 
 function navigateBack() {
+  if (state.logViewerOpen) {
+    state.logViewerOpen = false;
+    state.logViewerEvents = [];
+    state.logViewerSearch = "";
+    state.expandedLogKey = "";
+    logScreenChange("settings", "back");
+    render();
+    return true;
+  }
   if (state.collectionSheet) { closeVisibleSheet(() => { state.collectionSheet = null; render(); }); return true; }
   if (state.captureOpen) {
     closeVisibleSheet(() => { state.captureOpen = false; render(); });
@@ -902,12 +974,14 @@ function navigateBack() {
     readerLastScrollTop = 0;
     state.readerToolbarHidden = false;
     state.activeTab = "library";
+    logScreenChange("library", "back");
     render();
     return true;
   }
   if (state.activeTab !== "library") {
     setViewTransition("back");
     state.activeTab = "library";
+    logScreenChange("library", "back");
     render();
     return true;
   }
@@ -919,10 +993,13 @@ async function handleAction(target) {
   if (!action) return;
   if (action === "show-library") {
     invalidateSmryRequest();
+    logScreenChange("library", "tap");
     setViewTransition("back");
     state.activeTab = "library";
     state.article = null;
     state.captureOpen = false;
+    state.logViewerOpen = false;
+    state.logViewerEvents = [];
     state.focusMode = false;
     state.readerToolbarHidden = false;
     readerLastScrollTop = 0;
@@ -931,6 +1008,7 @@ async function handleAction(target) {
   }
   if (action === "show-tags") {
     invalidateSmryRequest();
+    logScreenChange("tags", "tap");
     setViewTransition("forward");
     state.activeTab = "tags";
     state.article = null;
@@ -944,6 +1022,8 @@ async function handleAction(target) {
   }
   if (action === "show-settings" || action === "show-debug") {
     invalidateSmryRequest();
+    const fromScreen = document.documentElement.dataset.huushScreen || "library";
+    logScreenChange("settings", "tap");
     setViewTransition("forward");
     void ensureFontPickerFontsLoaded();
     state.activeTab = "settings";
@@ -952,11 +1032,12 @@ async function handleAction(target) {
     state.settingsOpen = false;
     state.focusMode = false;
     state.readerToolbarHidden = false;
-    state.diagnosticsOpen = false;
-    state.diagnosticsSnapshot = [];
+    state.logViewerOpen = false;
+    state.logViewerEvents = [];
     state.confirmClear = false;
     readerLastScrollTop = 0;
-    log("settings.opened", "User opened settings", { refreshDebug: false });
+    logger.log("settings.opened", { fromScreen });
+    logStorageStats();
     render();
     return;
   }
@@ -977,7 +1058,7 @@ async function handleAction(target) {
   if (action === "delete-collection") { const id = target.dataset.id; const item = state.collections.find((entry) => entry.id === id); if (!item) return; if (!window.confirm(`Delete the “${item.name}” collection? Articles will be kept.`)) return; const articles = await listArticles(); await Promise.all(articles.filter((article) => article.collectionIds?.includes(id)).map((article) => setArticleCollections(article.id, article.collectionIds.filter((entry) => entry !== id)))); state.collections = state.collections.filter((entry) => entry.id !== id); if (state.activeCollectionId === id) state.activeCollectionId = "all"; state.articles = await listArticles(); if (state.article) state.article = state.articles.find((article) => article.id === state.article.id) || state.article; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
   if (action === "open-new-collection") { state.collectionSheet = { type: "new" }; render(); requestAnimationFrame(() => document.querySelector("[data-collection-name]")?.focus()); return; }
   if (action === "close-collection-sheet") { closeVisibleSheet(() => { state.collectionSheet = null; render(); }); return; }
-  if (action === "create-collection") { const input = document.querySelector("[data-collection-name]"); const name = input?.value.trim().slice(0, 60); if (!name) return; if (state.collections.some((item) => item.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } state.collections = [...state.collections, { id: `collection-${Date.now()}`, name }]; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
+  if (action === "create-collection") { const input = document.querySelector("[data-collection-name]"); const name = input?.value.trim().slice(0, 60); if (!name) return; if (state.collections.some((item) => item.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } state.collections = [...state.collections, { id: `collection-${Date.now()}`, name }]; await storage.set(KEYS.collections, state.collections); logger.log("collection.create", { name, color: null }); state.collectionSheet = null; render(); return; }
   if (action === "open-organize") { state.collectionSheet = { type: "organize", articleId: target.dataset.id }; render(); return; }
   if (action === "save-article-collections") { const article = state.articles.find((item) => item.id === state.collectionSheet?.articleId); if (article) { const ids = [...document.querySelectorAll("[data-collection-check]:checked")].map((input) => input.value); await setArticleCollections(article.id, ids); state.articles = await listArticles(); if (state.article?.id === article.id) state.article = state.articles.find((item) => item.id === article.id) || state.article; } state.collectionSheet = null; render(); return; }
   if (action === "open-article") {
@@ -988,14 +1069,16 @@ async function handleAction(target) {
     state.articleScrollTop = 0;
     state.articleProgress = 0;
     readerLastScrollTop = 0;
+    lastReaderScrollMilestone = 0;
+    readerOpenedAt = Date.now();
     state.readerToolbarHidden = false;
     state.focusMode = false;
-    if (state.article) log("article.opened", state.article.title.slice(0, 80));
+    if (state.article) { logScreenChange("reader", "tap"); logger.log("article.open", { id: state.article.id, title: state.article.title, source: state.article.source, savedAt: state.article.dateAdded }); }
     render();
     return;
   }
   if (action === "delete-article") {
-    await deleteArticle(target.dataset.id);
+    await deleteArticle(target.dataset.id, "menu");
     return;
   }
   if (action === "undo-delete") {
@@ -1019,10 +1102,9 @@ async function handleAction(target) {
     state.collections = [];
     state.activeCollectionId = "all";
     state.searchQuery = "";
-    state.logs = [];
     state.pendingDelete = null;
     await storage.set(KEYS.collections, []);
-    await storage.set(KEYS.logs, []);
+    logger.log("storage.stats", { articles: 0, totalBytes: 0, freeBytes: null });
     showToast("Local library cleared.", "success");
     return;
   }
@@ -1041,9 +1123,11 @@ async function handleAction(target) {
   if (action === "set-font") {
     const selectedFont = FONTS.find((font) => font.id === target.dataset.font) || FONTS[0];
     if (selectedFont.id === state.settings.font || !beginSettingsInteraction()) return;
+    const oldFont = state.settings.font;
     state.settings.font = selectedFont.id;
     state.settings.readerLineHeight = selectedFont.bodyLineHeight;
     state.settings.readerTitleLineHeight = selectedFont.titleLineHeight;
+    logSettingsChanged("font", oldFont, selectedFont.id);
     applySettings();
     syncPreferenceControls();
     await ensureFontLoaded(selectedFont.id);
@@ -1054,29 +1138,69 @@ async function handleAction(target) {
     if (!beginSettingsInteraction()) return;
     const nextSize = Math.min(24, Math.max(14, state.settings.fontSize + Number(target.dataset.delta)));
     if (nextSize === state.settings.fontSize) return;
+    const oldSize = state.settings.fontSize;
     state.settings.fontSize = nextSize;
+    logSettingsChanged("fontSize", oldSize, nextSize);
     await persistSettings();
     return;
   }
   if (action === "set-theme") {
     const nextTheme = ["system", "light", "dark", "sepia"].includes(target.dataset.theme) ? target.dataset.theme : "light";
     if (nextTheme === state.settings.theme || !beginSettingsInteraction()) return;
+    const oldTheme = state.settings.theme;
     state.settings.theme = nextTheme;
+    logSettingsChanged("theme", oldTheme, nextTheme);
     await persistSettings();
     return;
   }
   if (action === "toggle-theme") {
     if (!beginSettingsInteraction()) return;
+    const oldTheme = state.settings.theme;
     state.settings.theme = nextThemePreference();
+    logSettingsChanged("theme", oldTheme, state.settings.theme);
     await persistSettings();
     return;
   }
-  if (action === "toggle-diagnostics") {
-    state.diagnosticsOpen = !state.diagnosticsOpen;
-    state.diagnosticsSnapshot = state.diagnosticsOpen ? snapshotDiagnosticsLogs(state.logs) : [];
+  if (action === "version-tap") {
+    const now = Date.now();
+    if (now - lastVersionTapAt > 3000) versionTapCount = 0;
+    versionTapCount += 1;
+    lastVersionTapAt = now;
+    if (versionTapCount === 5) showToast("2 more taps to enable developer options.", "neutral");
+    if (versionTapCount >= 7) { versionTapCount = 0; toggleDeveloperOptions(); render(); }
+    return;
+  }
+  if (action === "open-licenses") { showToast("Open-source notices are bundled with Huush.", "neutral"); return; }
+  if (action === "toggle-developer-logging") { state.developerLoggingEnabled = !state.developerLoggingEnabled; logger.setEnabled(state.developerLoggingEnabled); render(); return; }
+  if (action === "toggle-developer-verbose") { state.developerVerboseLogging = !state.developerVerboseLogging; logger.setVerbose(state.developerVerboseLogging); render(); return; }
+  if (action === "open-log-viewer") {
+    logScreenChange("developer-logs", "tap");
+    state.logViewerOpen = true;
+    state.logViewerEvents = logger.getAllEvents().slice(-200).reverse();
+    state.logViewerFilter = "all";
+    state.logViewerSearch = "";
+    state.expandedLogKey = "";
     render();
     return;
   }
+  if (action === "close-log-viewer") { state.logViewerOpen = false; state.logViewerEvents = []; state.logViewerSearch = ""; state.expandedLogKey = ""; logScreenChange("settings", "back"); render(); return; }
+  if (action === "filter-logs") { state.logViewerFilter = target.dataset.filter || "all"; render(); return; }
+  if (action === "toggle-log-entry") { state.expandedLogKey = state.expandedLogKey === target.dataset.logKey ? "" : target.dataset.logKey || ""; render(); return; }
+  if (action === "export-logs") {
+    try { await exportLogs(); logger.log("diagnostics.exported", { eventCount: logger.getAllEvents().length }); showToast("Diagnostic JSON ready to share.", "success"); }
+    catch (error) { logCapacitorError("Share", "share", error); showToast("Couldn’t export diagnostics.", "error"); }
+    return;
+  }
+  if (action === "clear-developer-logs") {
+    if (!window.confirm("Delete all diagnostic logs? This cannot be undone.")) return;
+    logger.clear();
+    state.logViewerEvents = [];
+    showToast("Diagnostic logs cleared.", "success");
+    return;
+  }
+  if (action === "simulate-error") { window.setTimeout(() => { throw new Error("Huush simulated developer error"); }, 0); showToast("Simulated error captured.", "neutral"); return; }
+  if (action === "reset-developer-options") { state.developerOptionsEnabled = false; state.developerLoggingEnabled = true; state.developerVerboseLogging = false; logger.setEnabled(true); logger.setVerbose(false); try { window.localStorage.removeItem(STORAGE_FLAGS.developer); } catch { /* no-op */ } render(); return; }
+  if (action === "reset-settings") { resetReadingDefaults(); return; }
   if (action === "retry-smry") {
     await retryWithSmry();
     return;
@@ -1090,24 +1214,6 @@ async function handleAction(target) {
       log("source.copy.failed", error instanceof Error ? error.message : "Clipboard error");
       showToast("Couldn’t copy the source link.", "error");
     }
-    return;
-  }
-  if (action === "copy-logs") {
-    try {
-      await copyText(buildLogExport());
-      log("debug.copied", "Diagnostic log copied to clipboard");
-      showToast("Diagnostic log copied.", "success");
-    } catch (error) {
-      log("debug.copy.failed", error instanceof Error ? error.message : "Clipboard error");
-      showToast("Couldn’t copy the log.", "error");
-    }
-    return;
-  }
-  if (action === "clear-logs") {
-    state.logs = [];
-    state.diagnosticsSnapshot = [];
-    await storage.set(KEYS.logs, []);
-    showToast("Event log cleared.");
     return;
   }
   if (action === "dismiss-toast") {
@@ -1154,6 +1260,14 @@ document.addEventListener("submit", (event) => {
 
 document.addEventListener("input", (event) => {
   if (!(event.target instanceof HTMLInputElement)) return;
+  if (event.target.matches("[data-log-search]")) {
+    state.logViewerSearch = event.target.value;
+    window.clearTimeout(searchLogTimeout);
+    searchLogTimeout = window.setTimeout(() => logger.log("search.query", { term: state.logViewerSearch, resultCount: filteredLogEvents().length, durationMs: 0 }), 350);
+    render();
+    requestAnimationFrame(() => { const field = document.querySelector("[data-log-search]"); field?.focus(); field?.setSelectionRange(state.logViewerSearch.length, state.logViewerSearch.length); });
+    return;
+  }
   if (event.target.matches("[data-search-articles]")) {
     state.searchQuery = event.target.value;
     render();
@@ -1182,6 +1296,7 @@ document.addEventListener("change", (event) => {
       syncPreferenceControls();
       return;
     }
+    logger.log("settings.changed", { key: "fontSize", oldValue: lastPersistedFontSize, newValue: nextSize });
     void persistSettings();
   }
 });
@@ -1218,8 +1333,8 @@ document.addEventListener("pointerup", () => {
   const shouldReveal = swipeGesture.deltaX <= -38;
   swipeGesture.suppressClick = swipeGesture.active;
   resetSwipeGesture();
-  if (shouldDelete) {
-    void deleteArticle(id);
+    if (shouldDelete) {
+    void deleteArticle(id, "swipe");
     return;
   }
   if (shouldReveal) card.classList.add("is-revealed");
@@ -1279,21 +1394,48 @@ async function setupNativeBackHandling() {
       if (!navigateBack()) CapacitorApp.exitApp();
     });
   } catch (error) {
-    log("navigation.native.failed", error instanceof Error ? error.message : "Native back listener unavailable");
+    logCapacitorError("App", "backButton", error);
+  }
+}
+
+async function setupAppLifecycleLogging() {
+  const onStateChange = (isActive) => {
+    if (isActive) {
+      logger.log("app.resume", { backgroundDurationMs: lastPauseAt ? Math.max(0, Date.now() - lastPauseAt) : 0 });
+      lastPauseAt = 0;
+      return;
+    }
+    lastPauseAt = Date.now();
+    logger.log("app.pause", { memoryWarning: false });
+    logger.flush();
+  };
+  if (Capacitor.isNativePlatform()) {
+    try { await CapacitorApp.addListener("appStateChange", ({ isActive }) => onStateChange(isActive)); }
+    catch (error) { logCapacitorError("App", "appStateChange", error); }
+  } else {
+    document.addEventListener("visibilitychange", () => onStateChange(document.visibilityState === "visible"));
+    window.addEventListener("beforeunload", () => logger.flush());
   }
 }
 
 async function init() {
-  const [legacyArticles, savedSettings, savedLogs, savedCollections] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get(KEYS.logs, []), storage.get(KEYS.collections, [])]);
+  const [legacyArticles, savedSettings, savedLegacyLogs, savedCollections] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get("whitemint:logs", []), storage.get(KEYS.collections, [])]);
   state.settings = normalizeSettings(savedSettings);
   lastPersistedFontSize = state.settings.fontSize;
+  state.developerOptionsEnabled = readLocalFlag(STORAGE_FLAGS.developer, false);
+  state.developerLoggingEnabled = logger.enabled;
+  state.developerVerboseLogging = logger.verbose;
+  logger.migrateLegacyEvents(Array.isArray(savedLegacyLogs) ? savedLegacyLogs : []);
   state.collections = Array.isArray(savedCollections) ? savedCollections.filter((item) => item?.id && item.id !== "inbox" && item.name?.trim()).map((item) => ({ id: item.id, name: item.name.trim().slice(0, 60) })) : [];
   await storage.set(KEYS.collections, state.collections);
-  state.logs = Array.isArray(savedLogs) ? savedLogs.filter((entry) => entry?.event !== "status-bar.state").slice(0, LIMITS.logs) : [];
   await migrateLegacyArticles(Array.isArray(legacyArticles) ? legacyArticles : [], log);
   state.articles = await listArticles();
-  log("app.ready", `${Capacitor.getPlatform()} · ${Capacitor.isNativePlatform() ? "native HTTP ready" : "web preview"}`);
+  document.documentElement.dataset.huushScreen = "library";
+  logger.log("app.launch", { coldStart: true, version: APP_VERSION, platform: Capacitor.getPlatform(), webViewVersion: navigator.userAgent });
+  logStorageStats();
+  logMemoryWarningIfAvailable();
   await setupNativeBackHandling();
+  await setupAppLifecycleLogging();
   render();
   preloadReadingFonts();
 }

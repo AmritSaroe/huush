@@ -25,8 +25,14 @@ importers:
       '@capacitor/core':
         specifier: ^6
         version: 6.2.1
+      '@capacitor/filesystem':
+        specifier: ^6.0.0
+        version: 6.0.4(@capacitor/core@6.2.1)
       '@capacitor/preferences':
         specifier: ^6
+        version: 6.0.4(@capacitor/core@6.2.1)
+      '@capacitor/share':
+        specifier: ^6.0.0
         version: 6.0.4(@capacitor/core@6.2.1)
       '@capacitor/status-bar':
         specifier: '6'
@@ -388,8 +394,18 @@ packages:
   '@capacitor/core@6.2.1':
     resolution: {integrity: sha512-urZwxa7hVE/BnA18oCFAdizXPse6fCKanQyEqpmz6cBJ2vObwMpyJDG5jBeoSsgocS9+Ax+9vb4ducWJn0y2qQ==}
 
+  '@capacitor/filesystem@6.0.4':
+    resolution: {integrity: sha512-eFlg/ZrwYA4Y6ClLRRikudVu2XvuZxfX/XC0ky9MgfbC9dyqTnVkkEoWM6vr1xR89YNY4mB0EeVTet1m1Jcumw==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
+
   '@capacitor/preferences@6.0.4':
     resolution: {integrity: sha512-ziauSI1pgdyl+gduvvf8lInvzF3Wdyu/ok+u7NlnhKp8XOj9plJgtnXZWFiR8CiCK5wMvo+gFaNh3zhMyEUwpA==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
+
+  '@capacitor/share@6.0.4':
+    resolution: {integrity: sha512-Ij8C3as4n6L+SUj3M1ko+DGIsrDw2VTkn5Y/pQnFRI9dRk6YoSpGKLN54yOyN7ew3N9bVa8Rko+dFwdcNg7ESA==}
     peerDependencies:
       '@capacitor/core': ^6.0.0
 
@@ -4098,7 +4114,15 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@capacitor/filesystem@6.0.4(@capacitor/core@6.2.1)':
+    dependencies:
+      '@capacitor/core': 6.2.1
+
   '@capacitor/preferences@6.0.4(@capacitor/core@6.2.1)':
+    dependencies:
+      '@capacitor/core': 6.2.1
+
+  '@capacitor/share@6.0.4(@capacitor/core@6.2.1)':
     dependencies:
       '@capacitor/core': 6.2.1
 
