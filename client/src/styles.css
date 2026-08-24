@@ -276,3 +276,12 @@ button:not(:disabled):active{transform:scale(.975);}
 @media (min-width:600px){
   .reader-toolbar{padding-left:max(32px,calc(clamp(32px,6vw,96px) + env(safe-area-inset-left)));padding-right:max(32px,calc(clamp(32px,6vw,96px) + env(safe-area-inset-right)))}
 }
+
+/* Compact reader action row */
+.article-reading__footer{grid-template-columns:auto minmax(0,1fr);min-height:0;margin-top:18px;padding-top:11px;padding-bottom:max(8px,env(safe-area-inset-bottom));gap:10px 16px}
+.article-reading__footer .collection-organize-button{grid-column:1;grid-row:1;justify-self:start}
+.article-reading__footer .article-reading__source-action{grid-column:2;grid-row:1;justify-self:end}
+@media (max-width:380px){
+  .article-reading__footer{gap:8px 10px}
+  .article-reading__footer .collection-organize-button,.article-reading__footer .article-reading__source-action{font-size:13px}
+}
