@@ -458,7 +458,7 @@ export async function extractArticle(url, options = {}) {
   try {
     const html = await fetchHtml(url, options);
     const doc = new DOMParser().parseFromString(html, "text/html");
-    if (isEconomicTimesSectionUrl(url)) throw extractionError("section_page", "This is an Economic Times section page. Paste an individual article link.");
+    if (isArticleIndexUrl(url)) throw extractionError("section_page", "This is an Economic Times section page. Paste an individual article link.");
 
     const strategies = [
       { name: "json", fn: () => extractFromJson(doc, url) },
