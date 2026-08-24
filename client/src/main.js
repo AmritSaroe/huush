@@ -6,6 +6,7 @@ import "./styles.css";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Preferences } from "@capacitor/preferences";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import { Readability } from "@mozilla/readability";
 import { extractArticle } from "./lib/fetcher.js";
 import { extractSmryArticle, getSmryReaderUrl } from "./lib/smry.js";
@@ -34,6 +35,7 @@ const state = {
   settingsOpen: false,
   captureOpen: false,
   focusMode: false,
+  readerToolbarHidden: false,
   articles: [],
   collections: [],
   activeCollectionId: "all",
@@ -49,6 +51,9 @@ const state = {
 };
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
+let nativeStatusBarConfigured = false;
+let nativeStatusBarStyle = "";
+let readerLastScrollTop = 0;
 
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
@@ -141,19 +146,45 @@ function formatClock(value) {
 }
 
 function sanitizeArticleHtml(html, baseUrl, heroFallback = "") {
-  return sanitizeContent(html, { baseUrl, heroFallback });
+  const cleanHtml = sanitizeContent(html, { baseUrl, heroFallback });
+  if (!/^https?:\/\/(?:www\.)?thehindu\.com\//i.test(baseUrl || "")) return cleanHtml;
+  const container = document.createElement("div");
+  container.innerHTML = cleanHtml;
+  container.querySelectorAll("p").forEach((paragraph) => {
+    const text = (paragraph.textContent || "").replace(/\s+/g, " ").trim();
+    if (/^(?:published|updated)\s*[-–:]\s+.+\b(?:19|20)\d{2}\b(?:.*\b(?:IST|GMT|UTC)\b)?$/i.test(text)) paragraph.remove();
+  });
+  return container.innerHTML;
+}
+
+async function syncNativeStatusBar() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    if (!nativeStatusBarConfigured) {
+      await StatusBar.setOverlaysWebView({ overlay: true });
+      nativeStatusBarConfigured = true;
+    }
+    const style = state.settings.theme === "dark" ? Style.Light : Style.Dark;
+    if (nativeStatusBarStyle !== style) {
+      await StatusBar.setStyle({ style });
+      nativeStatusBarStyle = style;
+    }
+  } catch (error) {
+    log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable");
+  }
 }
 
 function applySettings() {
   const root = document.documentElement;
   root.dataset.theme = state.settings.theme;
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
-  const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#eee2c5" }[state.settings.theme] || "#f4f4f1";
+  const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#e9d8b1" }[state.settings.theme] || "#f4f4f1";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   root.classList.toggle("dark", state.settings.theme === "dark");
   root.classList.toggle("sepia", state.settings.theme === "sepia");
   const article = document.querySelector(".article-reading");
   if (article) article.dataset.font = state.settings.font;
+  void syncNativeStatusBar();
 }
 
 function syncPreferenceControls() {
@@ -179,9 +210,49 @@ function syncFocusMode() {
   document.querySelector(".reader-view")?.classList.toggle("is-focus", state.focusMode);
 }
 
+function syncReaderToolbar() {
+  const toolbar = document.querySelector(".reader-toolbar");
+  if (!toolbar) return;
+  toolbar.classList.toggle("is-hidden", state.readerToolbarHidden);
+  toolbar.setAttribute("aria-hidden", state.readerToolbarHidden ? "true" : "false");
+  toolbar.querySelectorAll("button, a").forEach((control) => {
+    if (state.readerToolbarHidden) {
+      if (!control.hasAttribute("data-reader-tabindex")) control.setAttribute("data-reader-tabindex", control.getAttribute("tabindex") || "");
+      control.setAttribute("tabindex", "-1");
+    } else if (control.hasAttribute("data-reader-tabindex")) {
+      const previous = control.getAttribute("data-reader-tabindex");
+      if (previous) control.setAttribute("tabindex", previous);
+      else control.removeAttribute("tabindex");
+      control.removeAttribute("data-reader-tabindex");
+    }
+  });
+}
+
+function setReaderToolbarHidden(next) {
+  const toolbar = document.querySelector(".reader-toolbar");
+  if (next && toolbar?.contains(document.activeElement)) return;
+  state.readerToolbarHidden = next;
+  if (!next && state.focusMode) {
+    state.focusMode = false;
+    syncFocusMode();
+  }
+  syncReaderToolbar();
+}
+
+function handleReaderScroll(surface) {
+  const scrollTop = Math.max(0, surface.scrollTop);
+  const delta = scrollTop - readerLastScrollTop;
+  state.articleScrollTop = scrollTop;
+  if (scrollTop <= 18) setReaderToolbarHidden(false);
+  else if (delta > 5) setReaderToolbarHidden(true);
+  else if (delta < -5) setReaderToolbarHidden(false);
+  readerLastScrollTop = scrollTop;
+}
+
 function setFocusMode(next) {
   state.focusMode = next;
   syncFocusMode();
+  setReaderToolbarHidden(next);
   const announce = document.querySelector(".focus-announce");
   if (announce) announce.textContent = next ? "Focus mode on. Tap the article again to show controls." : "Reader controls shown.";
 }
@@ -351,7 +422,7 @@ function readerMarkup() {
   if (!article) return libraryMarkup();
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
   const content = articleContentMarkup(article.content, article.url);
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button><span>Saved in whitemint</span>${article.previewOnly ? "" : `<a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Toggle theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool" data-action="open-settings" aria-label="Reading settings">${icon("settings", 20)}</button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button><span class="article-reading__saved-state"><i aria-hidden="true"></i>Saved on this device</span>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -374,7 +445,11 @@ function render() {
   applySettings();
   if (state.article) requestAnimationFrame(() => {
     const surface = document.querySelector(".reader-scroll-surface");
-    if (surface) surface.scrollTop = state.articleScrollTop;
+    if (surface) {
+      surface.scrollTop = state.articleScrollTop;
+      readerLastScrollTop = state.articleScrollTop;
+      syncReaderToolbar();
+    }
   });
 }
 
@@ -387,6 +462,8 @@ async function handleExtractUrl(url) {
     state.article = savedArticle;
     state.collectionSheet = { type: "organize", articleId: savedArticle.id };
     state.articleScrollTop = 0;
+    readerLastScrollTop = 0;
+    state.readerToolbarHidden = false;
     state.focusMode = false;
     state.captureOpen = false;
     showToast("Saved to your reading shelf.", "success");
@@ -519,6 +596,8 @@ function navigateBack() {
     invalidateSmryRequest();
     state.article = null;
     state.articleScrollTop = 0;
+    readerLastScrollTop = 0;
+    state.readerToolbarHidden = false;
     state.activeTab = "library";
     render();
     return true;
@@ -540,6 +619,8 @@ async function handleAction(target) {
     state.article = null;
     state.captureOpen = false;
     state.focusMode = false;
+    state.readerToolbarHidden = false;
+    readerLastScrollTop = 0;
     render();
     return;
   }
@@ -549,6 +630,8 @@ async function handleAction(target) {
     state.article = null;
     state.captureOpen = false;
     state.focusMode = false;
+    state.readerToolbarHidden = false;
+    readerLastScrollTop = 0;
     log("debug.opened", "User opened diagnostics");
     render();
     return;
@@ -579,6 +662,8 @@ async function handleAction(target) {
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
     state.collectionSheet = null;
     state.articleScrollTop = 0;
+    readerLastScrollTop = 0;
+    state.readerToolbarHidden = false;
     state.focusMode = false;
     if (state.article) log("article.opened", state.article.title.slice(0, 80));
     render();
@@ -670,7 +755,7 @@ document.addEventListener("submit", (event) => {
 });
 
 document.addEventListener("scroll", (event) => {
-  if (event.target instanceof Element && event.target.matches(".reader-scroll-surface")) state.articleScrollTop = event.target.scrollTop;
+  if (event.target instanceof Element && event.target.matches(".reader-scroll-surface")) handleReaderScroll(event.target);
 }, true);
 
 document.addEventListener("pointerdown", (event) => {
@@ -725,7 +810,11 @@ document.addEventListener("click", (event) => {
   const protectedTarget = event.target.closest("a, button, input, textarea, select, img, figure, figcaption");
   if (state.article && readerSurface && !protectedTarget) {
     const bounds = readerSurface.getBoundingClientRect();
-    const isCenterTap = event.clientY > bounds.top + 44 && event.clientY < bounds.bottom - 44;
+    if (event.clientY <= bounds.top + 52) {
+      setReaderToolbarHidden(false);
+      return;
+    }
+    const isCenterTap = event.clientY > bounds.top + 52 && event.clientY < bounds.bottom - 44;
     if (isCenterTap) setFocusMode(!state.focusMode);
   }
 });

@@ -19,6 +19,7 @@
     "@capacitor/app": "6",
     "@capacitor/core": "^6",
     "@capacitor/preferences": "^6",
+    "@capacitor/status-bar": "6",
     "@hookform/resolvers": "^5.2.2",
     "@mozilla/readability": "^0.6.0",
     "@radix-ui/react-accordion": "^1.2.12",
