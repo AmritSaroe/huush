@@ -20,13 +20,12 @@ globalThis.Readability = Readability;
 
 const KEYS = { articles: "whitemint:articles", settings: "whitemint:settings", logs: "whitemint:logs", collections: "whitemint:collections" };
 const LIMITS = { logs: 160 };
-const DEFAULT_SETTINGS = { theme: "light", font: "sans", fontSize: 18 };
+const DEFAULT_SETTINGS = { theme: "light", font: "source-serif", fontSize: 18 };
 const FONTS = [
   { id: "sans", label: "Inter", family: "var(--font-sans)" },
   { id: "nunito", label: "Nunito", family: "var(--font-nunito)" },
   { id: "merriweather", label: "Merriweather", family: "var(--font-serif)" },
-  { id: "source-serif", label: "Source Serif", family: "var(--font-serif-3)" },
-  { id: "mono", label: "JetBrains", family: "var(--font-mono)" },
+  { id: "source-serif", label: "Source Serif 4", family: "var(--font-serif-3)" },
 ];
 
 const state = {
