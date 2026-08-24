@@ -800,6 +800,7 @@ body,button,input,textarea,select,label,nav{font-family:var(--font-ui)}
 .editorial-library .daily-brief--clean h1,
 .editorial-library .daily-brief--clean h1 span,
 .editorial-library .daily-brief--clean h1 em,
+.editorial-library .daily-brief--clean h1 strong,
 .editorial-library .daily-brief--clean h1 .accent{
   background-color:transparent !important;
   background-image:none !important;
@@ -828,6 +829,9 @@ body,button,input,textarea,select,label,nav{font-family:var(--font-ui)}
   --duration-normal:.35s;
   --duration-slow:.5s;
   --duration-spring:.6s;
+  --ease-settle:cubic-bezier(.25,.1,.25,1);
+  --ease-dissolve:cubic-bezier(.4,0,.6,1);
+  --duration-breath:.5s;
 }
 :root,
 body,
