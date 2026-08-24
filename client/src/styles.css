@@ -294,10 +294,10 @@ button:not(:disabled):active{transform:scale(.975);}
 
 /* Adaptive layout system: size the UI from the available window, not a device model. */
 :root{
-  --wm-safe-top:env(safe-area-inset-top,0px);
-  --wm-safe-right:env(safe-area-inset-right,0px);
-  --wm-safe-bottom:env(safe-area-inset-bottom,0px);
-  --wm-safe-left:env(safe-area-inset-left,0px);
+  --wm-safe-top:max(env(safe-area-inset-top,0px),var(--wm-native-safe-top,0px));
+  --wm-safe-right:max(env(safe-area-inset-right,0px),var(--wm-native-safe-right,0px));
+  --wm-safe-bottom:max(env(safe-area-inset-bottom,0px),var(--wm-native-safe-bottom,0px));
+  --wm-safe-left:max(env(safe-area-inset-left,0px),var(--wm-native-safe-left,0px));
   --wm-page-gutter:clamp(20px,5vw,84px);
   --wm-reading-gutter:clamp(20px,6vw,112px);
   --wm-content-measure:76ch;
@@ -311,7 +311,7 @@ button:not(:disabled):active{transform:scale(.975);}
 .article-reading__body{padding-right:var(--wm-reading-gutter);padding-left:var(--wm-reading-gutter);}
 .article-reading__footer{width:auto;margin-right:var(--wm-reading-gutter);margin-left:var(--wm-reading-gutter);}
 .reader-toolbar{padding-right:max(14px,calc(14px + var(--wm-safe-right)));padding-left:max(14px,calc(14px + var(--wm-safe-left)));}
-.bottom-navigation{padding-right:max(20px,calc(20px + var(--wm-safe-right)));padding-bottom:max(8px,calc(8px + var(--wm-safe-bottom)));padding-left:max(20px,calc(20px + var(--wm-safe-left)));}
+.bottom-navigation{min-height:max(83px,calc(75px + var(--wm-safe-bottom)));padding-right:max(20px,calc(20px + var(--wm-safe-right)));padding-bottom:max(8px,calc(8px + var(--wm-safe-bottom)));padding-left:max(20px,calc(20px + var(--wm-safe-left)));}
 
 /* Compact windows stay single-pane and touch-friendly. */
 html[data-window-width="compact"]{
@@ -398,3 +398,17 @@ html[data-window-height="compact"][data-orientation="landscape"] .article-readin
 /* Font scaling must not create horizontal overflow in any window class. */
 .article-reading__body,.article-reading__opening,.article-reading__footer,.article-card__copy{min-width:0;overflow-wrap:anywhere;}
 .article-reading__body table{display:block;max-width:100%;overflow-x:auto;}
+
+/* Native Android insets are merged with browser safe-area values by the WebView bridge. */
+.reader-toolbar{height:max(72px,calc(65px + var(--wm-safe-top)));min-height:max(72px,calc(65px + var(--wm-safe-top)));flex-basis:max(72px,calc(65px + var(--wm-safe-top)));padding-top:calc(12px + var(--wm-safe-top));}
+.settings-sheet,.capture-sheet,.collection-sheet{max-height:min(84dvh,calc(100svh - var(--wm-safe-top)));padding-bottom:calc(27px + var(--wm-safe-bottom));}
+@media (max-width:599px){
+  .reader-toolbar{height:max(64px,calc(57px + var(--wm-safe-top)));min-height:max(64px,calc(57px + var(--wm-safe-top)));flex-basis:max(64px,calc(57px + var(--wm-safe-top)));padding-top:calc(8px + var(--wm-safe-top));}
+}
+@media (orientation:landscape) and (min-width:600px){
+  .reader-toolbar{height:max(60px,calc(55px + var(--wm-safe-top)));min-height:max(60px,calc(55px + var(--wm-safe-top)));flex-basis:max(60px,calc(55px + var(--wm-safe-top)));padding-top:calc(7px + var(--wm-safe-top));}
+}
+
+
+/* Keep toolbar collapse authoritative after inset-aware height rules. */
+.reader-toolbar.is-hidden{height:0;min-height:0;flex-basis:0;padding-top:0;padding-bottom:0;}
