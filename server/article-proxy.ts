@@ -19,6 +19,7 @@ const ALLOWED_HOSTS = [
   "livemint.com",
   "pib.gov.in",
   "epw.in",
+  "noemamag.com",
 ];
 
 const requestCounts = new Map<string, { startedAt: number; count: number }>();
