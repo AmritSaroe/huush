@@ -631,3 +631,24 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--ink);}
 .settings-screen .welcome-copy{display:block;margin:34px 0 26px;}
 .settings-screen .welcome-copy h1{margin:0;font-family:var(--font-sans);font-size:clamp(32px,8vw,46px);font-weight:500;letter-spacing:-.055em;line-height:1.1;}
 .settings-screen .welcome-copy em{font-style:normal;}
+
+
+/* Sepia active-state contrast fix */
+:root[data-theme="sepia"] .theme-choice.is-active,
+:root[data-theme="sepia"] .font-chip.is-active,
+html[data-theme="sepia"] .theme-choice.is-active,
+html[data-theme="sepia"] .font-chip.is-active{
+  background:#3D2B1F;
+  border-color:#3D2B1F;
+  color:#FFF9EF;
+}
+:root[data-theme="sepia"] .font-chip.is-active span,
+:root[data-theme="sepia"] .font-chip.is-active small,
+:root[data-theme="sepia"] .theme-choice.is-active span,
+html[data-theme="sepia"] .font-chip.is-active span,
+html[data-theme="sepia"] .font-chip.is-active small,
+html[data-theme="sepia"] .theme-choice.is-active span{color:#FFF9EF;}
+:root[data-theme="sepia"] .theme-choice.is-active .theme-swatch--sepia,
+html[data-theme="sepia"] .theme-choice.is-active .theme-swatch--sepia{background:#FFF9EF;border-color:#FFF9EF;}
+:root[data-theme="sepia"] .font-chip:not(.is-active),
+:root[data-theme="sepia"] .theme-choice:not(.is-active){background:#F2E4C6;border-color:#D9CDB9;color:#756556;}
