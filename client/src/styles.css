@@ -471,3 +471,6 @@ html[data-window-height="compact"][data-orientation="landscape"] .article-readin
   .capture-sheet__intro{margin-top:13px;margin-bottom:12px;font-size:13px;}
   .capture-sheet__note{font-size:11px;}
 }
+
+/* The native status bar is transparent in edge-to-edge mode; paint its safe-area region from the active theme. */
+html::before{content:"";position:fixed;z-index:100;top:0;right:0;left:0;height:var(--wm-safe-top,0px);background:var(--wm-system-bar-color,var(--bg));pointer-events:none;transition:background-color var(--motion-standard);}

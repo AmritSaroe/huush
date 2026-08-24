@@ -186,6 +186,7 @@ function applySettings() {
   root.dataset.theme = state.settings.theme;
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
   const themeColor = { light: "#f4f4f1", dark: "#101011", sepia: "#e9d8b1" }[state.settings.theme] || "#f4f4f1";
+  root.style.setProperty("--wm-system-bar-color", themeColor);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
   root.classList.toggle("dark", state.settings.theme === "dark");
   root.classList.toggle("sepia", state.settings.theme === "sepia");
