@@ -166,7 +166,7 @@ async function syncNativeStatusBar() {
       await StatusBar.setOverlaysWebView({ overlay: false });
       nativeStatusBarConfigured = true;
     }
-    const style = state.settings.theme === "dark" ? Style.Light : Style.Dark;
+    const style = state.settings.theme === "dark" ? Style.Dark : Style.Light;
     if (nativeStatusBarStyle !== style) {
       await StatusBar.setStyle({ style });
       nativeStatusBarStyle = style;
@@ -176,6 +176,8 @@ async function syncNativeStatusBar() {
       await StatusBar.setBackgroundColor({ color: themeColor });
       nativeStatusBarColor = themeColor;
     }
+    const info = await StatusBar.getInfo();
+    log("status-bar.state", info);
   } catch (error) {
     log("status-bar.sync.failed", error instanceof Error ? error.message : "Native status bar unavailable");
   }
