@@ -356,8 +356,9 @@ async function handleExtract(form) {
     state.captureOpen = false;
     showToast("Saved to your reading shelf.", "success");
   } catch (error) {
-    log("fetch.failed", `${safeUrlForLog(url)} · ${error instanceof Error ? error.message : "Unknown extraction error"}`);
-    showToast("Couldn’t save this article. Check the diagnostic log if it continues.", "error");
+    const errorMessage = error instanceof Error ? error.message : "Unknown extraction error";
+    log("fetch.failed", `${safeUrlForLog(url)} · ${errorMessage}`);
+    showToast(error?.code === "section_page" ? errorMessage : "Couldn’t save this article. Check the diagnostic log if it continues.", "error");
   } finally {
     state.busy = false;
     render();

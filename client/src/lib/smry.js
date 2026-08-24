@@ -59,6 +59,12 @@ function blocksToHtml(body) {
   }).join("");
 }
 
+function normalizeSmryBody(body, publisher) {
+  const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (publisher !== "Economic Times") return lines;
+  return lines.filter((line) => !/^economyexclusives$/i.test(line) && !/^visualisation\s+by\s+.+\s+via\s+ai$/i.test(line));
+}
+
 function extractHeroHtml(fallbackArticle) {
   const match = String(fallbackArticle?.content || "").match(/<figure>[\s\S]*?<\/figure>/i);
   return match ? match[0] : "";
@@ -124,19 +130,21 @@ export async function extractSmryArticle(sourceUrl, fallbackArticle = null) {
   if (!body.trim()) throw new SmryExtractionError("smry returned an empty article.", "empty_response");
   if (body.length > MAX_RESPONSE_CHARS) throw new SmryExtractionError("smry returned an unexpectedly large response.", "response_too_large");
 
-  const textContent = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => !line.startsWith("[ref] ")).join(" ").replace(/\s+/g, " ").trim();
-  const blockCount = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length;
-  if (textContent.length < 200 || blockCount < 3) throw new SmryExtractionError("smry returned only a partial article.", "partial_article");
-
   const title = chooseTitle(headerValue(headers, "x-smry-title"), fallbackArticle?.title);
   const byline = headerValue(headers, "x-smry-author") || fallbackArticle?.byline || "";
   const publisher = headerValue(headers, "x-smry-publisher") || fallbackArticle?.source || "Article";
+  const lines = normalizeSmryBody(body.replace(/^\s*\[ref\] .*$/gm, ""), publisher);
+  const normalizedBody = lines.join("\n");
+  const textContent = lines.join(" ").replace(/\s+/g, " ").trim();
+  const blockCount = lines.length;
+  if (textContent.length < 200 || blockCount < 3) throw new SmryExtractionError("smry returned only a partial article.", "partial_article");
+
   const provenanceUrl = headerValue(headers, "x-smry-source") || normalizeSourceUrl(sourceUrl);
   return {
     title,
     byline,
     source: publisher,
-    content: `${extractHeroHtml(fallbackArticle)}${blocksToHtml(body)}`,
+    content: `${extractHeroHtml(fallbackArticle)}${blocksToHtml(normalizedBody)}`,
     textContent,
     excerpt: textContent.slice(0, 240),
     previewOnly: textContent.length < 1200 || blockCount < 3,

@@ -154,6 +154,47 @@ function bodyFromRecord(record) {
     .find(value => typeof value === "string" && clean(value).length >= 200) || "";
 }
 
+function storyJsonToHtml(value) {
+  const render = (node) => {
+    if (!node) return "";
+    if (Array.isArray(node)) return node.map(render).join("");
+    if (typeof node !== "object") return escapeHtml(String(node));
+    if (node.node === "text") return escapeHtml(node.text || "");
+    if (node.node !== "element" && node.child) return render(node.child);
+    const tag = String(node.tag || "div").toLowerCase();
+    const inner = render(node.child);
+    if (!inner.trim()) return "";
+    if (/^h[2-6]$/.test(tag)) return `<${tag}>${inner}</${tag}>`;
+    if (["p", "div", "section", "article", "blockquote"].includes(tag)) return `<p>${inner}</p>`;
+    if (tag === "br") return "<br />";
+    if (["strong", "b", "em", "i", "u"].includes(tag)) return `<${tag}>${inner}</${tag}>`;
+    return inner;
+  };
+  return render(value);
+}
+
+function recordHasAccessGate(record) {
+  if (!record || typeof record !== "object") return false;
+  if (record.isAccessibleForFree === false || record.prime_blocker) return true;
+  try { return /etprimeblocker|subscription required|subscribe to continue|to continue reading/i.test(JSON.stringify(record.storyJSON || record)); }
+  catch { return false; }
+}
+
+function isEconomicTimesSectionUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    const path = parsed.pathname.replace(/\/+$/, "") || "/";
+    return (host === "economictimes.com" || host === "economictimes.indiatimes.com") && /^\/prime(?:-exclusive)?$/.test(path);
+  } catch { return false; }
+}
+
+function extractionError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
 function looksLikeArticleRecord(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const body = bodyFromRecord(value);
@@ -273,7 +314,9 @@ function extractFromJson(doc, url) {
 
   const title = clean(data.headline || data.title || data.pageTitle || data.meta_title || data.story_page_meta_title || fixTitle(doc, ""));
   const byline = clean(data.author?.name || data.authorName || data.byline || fixByline(doc, ""));
-  const body = bodyFromRecord(data);
+  const recordBody = bodyFromRecord(data);
+  const storyBody = storyJsonToHtml(data.storyJSON);
+  const body = [recordBody, storyBody].filter(Boolean).sort((a, b) => textFromHtml(b).length - textFromHtml(a).length)[0] || "";
   if (!body) return null;
 
   let content;
@@ -293,6 +336,7 @@ function extractFromJson(doc, url) {
     content: heroImage(doc, url, title, content) + content,
     textContent: text,
     excerpt: text.slice(0, 240),
+    gated: recordHasAccessGate(data),
   };
 }
 
@@ -379,6 +423,7 @@ export async function extractArticle(url, options = {}) {
   try {
     const html = await fetchHtml(url, options);
     const doc = new DOMParser().parseFromString(html, "text/html");
+    if (isEconomicTimesSectionUrl(url)) throw extractionError("section_page", "This is an Economic Times section page. Paste an individual article link.");
 
     const strategies = [
       { name: "json", fn: () => extractFromJson(doc, url) },
@@ -409,7 +454,7 @@ export async function extractArticle(url, options = {}) {
       excerpt: best.excerpt,
       readingMinutes: readTime(best.textContent),
       dateAdded: new Date().toISOString(),
-      previewOnly: isLowQuality(best),
+      previewOnly: isLowQuality(best) || Boolean(best.gated),
       strategy: best._strategy,
       score: Math.round(best._score),
     };
@@ -419,6 +464,7 @@ export async function extractArticle(url, options = {}) {
   }
 
   if (directArticle && !directArticle.previewOnly) return directArticle;
+  if (directError?.code === "section_page") throw directError;
 
   try {
     options.log?.("fetch.smry.started", "Incomplete public result; trying smry agent extraction");
