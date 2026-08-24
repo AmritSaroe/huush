@@ -1,16 +1,16 @@
 /** Editorial Signal: generous newspaper-like hierarchy, neutral paper surfaces, and high-legibility themes. */
-@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}
-@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-Medium.woff2") format("woff2");font-style:normal;font-weight:500;font-display:swap}
-@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:swap}
-@font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}
-@font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:swap}
-@font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-Italic.woff2") format("woff2");font-style:italic;font-weight:400;font-display:swap}
-@font-face{font-family:"Merriweather";src:url("./assets/fonts/merriweather/Merriweather-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}
-@font-face{font-family:"Merriweather";src:url("./assets/fonts/merriweather/Merriweather-Bold.woff2") format("woff2");font-style:normal;font-weight:700;font-display:swap}
-@font-face{font-family:"Merriweather";src:url("./assets/fonts/merriweather/Merriweather-Italic.woff2") format("woff2");font-style:italic;font-weight:400;font-display:swap}
-@font-face{font-family:"Literata";src:url("./assets/fonts/literata/Literata-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}
-@font-face{font-family:"Literata";src:url("./assets/fonts/literata/Literata-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:swap}
-@font-face{font-family:"Literata";src:url("./assets/fonts/literata/Literata-Italic.woff2") format("woff2");font-style:italic;font-weight:400;font-display:swap}
+@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:optional}
+@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-Medium.woff2") format("woff2");font-style:normal;font-weight:500;font-display:optional}
+@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:optional}
+@font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:optional}
+@font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:optional}
+@font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-Italic.woff2") format("woff2");font-style:italic;font-weight:400;font-display:optional}
+@font-face{font-family:"Merriweather";src:url("./assets/fonts/merriweather/Merriweather-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:optional}
+@font-face{font-family:"Merriweather";src:url("./assets/fonts/merriweather/Merriweather-Bold.woff2") format("woff2");font-style:normal;font-weight:700;font-display:optional}
+@font-face{font-family:"Merriweather";src:url("./assets/fonts/merriweather/Merriweather-Italic.woff2") format("woff2");font-style:italic;font-weight:400;font-display:optional}
+@font-face{font-family:"Literata";src:url("./assets/fonts/literata/Literata-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:optional}
+@font-face{font-family:"Literata";src:url("./assets/fonts/literata/Literata-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:optional}
+@font-face{font-family:"Literata";src:url("./assets/fonts/literata/Literata-Italic.woff2") format("woff2");font-style:italic;font-weight:400;font-display:optional}
 
 :root { --font-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; --font-sans:"Inter",sans-serif; --font-serif:"Merriweather",Georgia,serif; --font-reading-source-serif-4:"Source Serif 4",Georgia,serif; --font-reading-literata:"Literata",Georgia,serif; --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; --bg:#f6f5f1; --paper:#fffefb; --ink:#121217; --muted:#77767a; --faint:#a7a5a5; --line:#deddd7; --soft:#eeede8; --lime:#17171b; --lime-deep:#17171b; --opening:#f1f1ee; --nav:#faf9f5; --shadow:0 9px 28px rgba(25,23,27,.06); --negative:#a94c44; --positive:#498441; --ease-out:cubic-bezier(.23,1,.32,1); color:var(--ink); background:var(--bg); }
 :root[data-theme="dark"] { --bg:#111113; --paper:#19191c; --ink:#f4f1e9; --muted:#b6b4b2; --faint:#828184; --line:#333235; --soft:#242426; --lime:#f4f4f0; --lime-deep:#f4f4f0; --opening:#181819; --nav:#19191c; --shadow:0 10px 28px rgba(0,0,0,.3); --negative:#efa8a1; --positive:#b0d99f; }
@@ -814,4 +814,124 @@ body,button,input,textarea,select,label,nav{font-family:var(--font-ui)}
   display:none !important;
   content:none !important;
   background:transparent !important;
+}
+
+
+/* Huush motion system: iOS-style easing with transform/opacity-first animation. */
+:root{
+  --ease-ios-spring:cubic-bezier(.34,1.56,.64,1);
+  --ease-ios-standard:cubic-bezier(.32,.72,0,1);
+  --ease-ios-decel:cubic-bezier(0,0,.2,1);
+  --ease-ios-accel:cubic-bezier(.4,0,1,1);
+  --duration-instant:.1s;
+  --duration-fast:.2s;
+  --duration-normal:.35s;
+  --duration-slow:.5s;
+  --duration-spring:.6s;
+}
+:root,
+body,
+#root,
+.app-shell,
+.dashboard-screen,
+.reader-view,
+.article-reading,
+.article-reading__opening,
+.article-reading__body,
+.bottom-navigation,
+.collection-chip,
+.collection-tool,
+.theme-toggle,
+.reader-tool,
+.article-card,
+.font-chip,
+.theme-choice,
+.type-scale-control,
+.capture__form input,
+.collection-management-actions input,
+.collection-management-actions button,
+.collection-organize-button,
+.collection-save,
+.settings-sheet,
+.capture-sheet,
+.collection-sheet,
+.reading-preview-card,
+.settings-info-list > *,
+.settings-disclosure,
+.confirm-dialog{
+  transition:
+    background-color var(--duration-normal) var(--ease-ios-standard),
+    color var(--duration-normal) var(--ease-ios-standard),
+    border-color var(--duration-normal) var(--ease-ios-standard),
+    box-shadow var(--duration-normal) var(--ease-ios-standard),
+    fill var(--duration-normal) var(--ease-ios-standard),
+    stroke var(--duration-normal) var(--ease-ios-standard);
+}
+.article-reading__body,
+.article-reading h1,
+.article-reading h2,
+.article-reading h3,
+.article-reading h4,
+.article-reading__meta,
+.reading-preview-card__sample{
+  transition:
+    font-family var(--duration-slow) var(--ease-ios-decel),
+    font-size var(--duration-fast) var(--ease-ios-standard),
+    background-color var(--duration-normal) var(--ease-ios-standard),
+    color var(--duration-normal) var(--ease-ios-standard);
+}
+svg,svg *{transition:fill var(--duration-normal) var(--ease-ios-standard),stroke var(--duration-normal) var(--ease-ios-standard);}
+
+.app-shell--view-forward .dashboard-screen,
+.app-shell--view-forward .reader-view,
+.app-shell--view-forward .tags-screen,
+.app-shell--view-forward .settings-screen{animation:view-enter var(--duration-normal) var(--ease-ios-standard) both;}
+.app-shell--view-back .dashboard-screen,
+.app-shell--view-back .reader-view,
+.app-shell--view-back .tags-screen,
+.app-shell--view-back .settings-screen{animation:view-enter-back var(--duration-normal) var(--ease-ios-standard) both;}
+@keyframes view-enter{from{opacity:.82;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+@keyframes view-enter-back{from{opacity:.82;transform:translateX(-18px)}to{opacity:1;transform:translateX(0)}}
+
+.sheet-backdrop,.capture-backdrop{animation:sheet-backdrop-in var(--duration-normal) var(--ease-ios-standard) both;transition:background-color var(--duration-normal) var(--ease-ios-standard);}
+.settings-sheet,.capture-sheet,.collection-sheet{animation:sheet-spring-in var(--duration-slow) var(--ease-ios-spring) both;will-change:transform,opacity;}
+.sheet-handle{border-radius:999px;opacity:.58;}
+.sheet-backdrop.is-closing,.capture-backdrop.is-closing{animation:sheet-backdrop-out var(--duration-fast) var(--ease-ios-accel) both;}
+.settings-sheet.is-closing,.capture-sheet.is-closing,.collection-sheet.is-closing{animation:sheet-spring-out var(--duration-fast) var(--ease-ios-accel) both;}
+@keyframes sheet-backdrop-in{from{opacity:0;background-color:rgba(12,12,14,0)}to{opacity:1;background-color:rgba(12,12,14,.42)}}
+@keyframes sheet-backdrop-out{from{opacity:1;background-color:rgba(12,12,14,.42)}to{opacity:0;background-color:rgba(12,12,14,0)}}
+@keyframes sheet-spring-in{from{opacity:0;transform:translateY(32px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes sheet-spring-out{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(24px) scale(.985)}}
+
+button:not(:disabled):active,
+.collection-chip:active,
+.collection-tool:active,
+.theme-choice:active,
+.font-chip:active,
+.bottom-navigation__item:active,
+.reader-tool:active,
+.collection-save:active,
+.collection-organize-button:active{transform:scale(.96);}
+.collection-chip,.collection-tool,.theme-choice,.font-chip,.bottom-navigation__item,.reader-tool,.collection-save,.collection-organize-button{will-change:transform; -webkit-tap-highlight-color:transparent;}
+.font-chip.is-active,.theme-choice.is-active{animation:card-select var(--duration-normal) var(--ease-ios-spring);}
+@keyframes card-select{0%{transform:scale(1)}45%{transform:scale(1.025)}100%{transform:scale(1)}}
+.article-card-list .swipe-card,
+.tag-list__item,
+.settings-info-list > *{animation:list-item-in var(--duration-normal) var(--ease-ios-decel) both;}
+.article-card-list .swipe-card:nth-child(1),.tag-list__item:nth-child(1),.settings-info-list > :nth-child(1){animation-delay:30ms}
+.article-card-list .swipe-card:nth-child(2),.tag-list__item:nth-child(2),.settings-info-list > :nth-child(2){animation-delay:70ms}
+.article-card-list .swipe-card:nth-child(3),.tag-list__item:nth-child(3),.settings-info-list > :nth-child(3){animation-delay:110ms}
+.article-card-list .swipe-card:nth-child(4),.tag-list__item:nth-child(4),.settings-info-list > :nth-child(4){animation-delay:150ms}
+@keyframes list-item-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.toast{animation:toast-spring-in var(--duration-slow) var(--ease-ios-spring) both;will-change:transform,opacity;}
+@keyframes toast-spring-in{from{opacity:0;transform:translateY(42px)}to{opacity:1;transform:translateY(0)}}
+.reader-toolbar{transition:transform var(--duration-normal) var(--ease-ios-standard),opacity var(--duration-normal) var(--ease-ios-standard),background-color var(--duration-normal) var(--ease-ios-standard),color var(--duration-normal) var(--ease-ios-standard);will-change:transform,opacity;}
+.reader-toolbar.is-hidden{transition:transform var(--duration-normal) var(--ease-ios-standard),opacity var(--duration-normal) var(--ease-ios-standard);}
+
+@media (prefers-reduced-motion:reduce){
+  .app-shell--view-forward .dashboard-screen,.app-shell--view-forward .reader-view,.app-shell--view-forward .tags-screen,.app-shell--view-forward .settings-screen,
+  .app-shell--view-back .dashboard-screen,.app-shell--view-back .reader-view,.app-shell--view-back .tags-screen,.app-shell--view-back .settings-screen,
+  .article-card-list .swipe-card,.tag-list__item,.settings-info-list > *,
+  .font-chip.is-active,.theme-choice.is-active,.toast,.settings-sheet,.capture-sheet,.collection-sheet,.sheet-backdrop,.capture-backdrop{animation:none!important;}
+  .collection-chip,.collection-tool,.theme-choice,.font-chip,.bottom-navigation__item,.reader-tool,.collection-save,.collection-organize-button{will-change:auto;}
 }

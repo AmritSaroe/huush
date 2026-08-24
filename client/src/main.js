@@ -48,6 +48,12 @@ function ensureFontPickerFontsLoaded() {
   return Promise.all(FONTS.filter((font) => font.serif).flatMap((font) => [ensureFontLoaded(font.id), ensureFontLoaded(font.id, 600), ensureFontLoaded(font.id, 400, "italic")]));
 }
 
+function preloadReadingFonts() {
+  const preload = () => void Promise.all(FONTS.filter((font) => font.serif).map((font) => ensureFontLoaded(font.id)));
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(preload, { timeout: 1200 });
+  else window.setTimeout(preload, 240);
+}
+
 const state = {
   activeTab: "library",
   article: null,
@@ -72,6 +78,7 @@ const state = {
   loggedImageUrls: new Set(),
   diagnosticsOpen: false,
   confirmClear: false,
+  viewTransition: "",
 };
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
@@ -79,7 +86,8 @@ let nativeStatusBarConfigured = false;
 let nativeStatusBarStyle = "";
 let nativeStatusBarColor = "";
 let readerLastScrollTop = 0;
-
+let fontSizeUpdateFrame = 0;
+let fontSizePersistTimeout = 0;
 function normalizeSettings(saved = {}) {
   const legacySizes = { small: 16, normal: 18, large: 21 };
   const preferredSize = Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : legacySizes[saved.size] || DEFAULT_SETTINGS.fontSize;
@@ -285,6 +293,37 @@ async function persistSettings() {
   syncPreferenceControls();
   await storage.set(KEYS.settings, state.settings);
   log("settings.updated", state.settings);
+}
+
+function queueFontSizePreview(value) {
+  state.settings.fontSize = Math.min(24, Math.max(14, Number(value)));
+  window.cancelAnimationFrame(fontSizeUpdateFrame);
+  fontSizeUpdateFrame = window.requestAnimationFrame(() => {
+    applySettings();
+    syncPreferenceControls();
+  });
+  window.clearTimeout(fontSizePersistTimeout);
+  fontSizePersistTimeout = window.setTimeout(() => void persistSettings(), 90);
+}
+
+function setViewTransition(direction = "forward") {
+  state.viewTransition = direction;
+}
+
+function reducedMotionPreferred() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+function closeVisibleSheet(onDone) {
+  const sheet = document.querySelector(".settings-sheet, .capture-sheet, .collection-sheet");
+  const backdrop = document.querySelector(".sheet-backdrop, .capture-backdrop");
+  if (!sheet) {
+    onDone();
+    return;
+  }
+  sheet.classList.add("is-closing");
+  backdrop?.classList.add("is-closing");
+  window.setTimeout(onDone, reducedMotionPreferred() ? 0 : 260);
 }
 
 function syncFocusMode() {
@@ -618,8 +657,15 @@ function toastMarkup() {
 
 function render() {
   const root = document.querySelector("#root");
-  root.innerHTML = `<div class="app-shell">${state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
+  const transition = state.viewTransition;
+  state.viewTransition = "";
+  const shellClass = transition ? ` app-shell--view-${transition}` : "";
+  root.innerHTML = `<div class="app-shell${shellClass}">${state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${toastMarkup()}</div>`;
   applySettings();
+  if (transition) {
+    const nextShell = root.querySelector(".app-shell");
+    window.setTimeout(() => nextShell?.classList.remove(`app-shell--view-${transition}`), reducedMotionPreferred() ? 0 : 420);
+  }
   if (state.article) requestAnimationFrame(() => {
     const surface = document.querySelector(".reader-scroll-surface");
     if (surface) {
@@ -754,15 +800,13 @@ async function copyText(text) {
 }
 
 function navigateBack() {
-  if (state.collectionSheet) { state.collectionSheet = null; render(); return true; }
+  if (state.collectionSheet) { closeVisibleSheet(() => { state.collectionSheet = null; render(); }); return true; }
   if (state.captureOpen) {
-    state.captureOpen = false;
-    render();
+    closeVisibleSheet(() => { state.captureOpen = false; render(); });
     return true;
   }
   if (state.settingsOpen) {
-    state.settingsOpen = false;
-    render();
+    closeVisibleSheet(() => { state.settingsOpen = false; render(); });
     return true;
   }
   if (state.focusMode) {
@@ -771,6 +815,7 @@ function navigateBack() {
   }
   if (state.article) {
     invalidateSmryRequest();
+    setViewTransition("back");
     state.article = null;
     state.articleScrollTop = 0;
     state.articleProgress = 0;
@@ -781,6 +826,7 @@ function navigateBack() {
     return true;
   }
   if (state.activeTab !== "library") {
+    setViewTransition("back");
     state.activeTab = "library";
     render();
     return true;
@@ -793,6 +839,7 @@ async function handleAction(target) {
   if (!action) return;
   if (action === "show-library") {
     invalidateSmryRequest();
+    setViewTransition("back");
     state.activeTab = "library";
     state.article = null;
     state.captureOpen = false;
@@ -804,6 +851,7 @@ async function handleAction(target) {
   }
   if (action === "show-tags") {
     invalidateSmryRequest();
+    setViewTransition("forward");
     state.activeTab = "tags";
     state.article = null;
     state.captureOpen = false;
@@ -816,6 +864,7 @@ async function handleAction(target) {
   }
   if (action === "show-settings" || action === "show-debug") {
     invalidateSmryRequest();
+    setViewTransition("forward");
     void ensureFontPickerFontsLoaded();
     state.activeTab = "settings";
     state.article = null;
@@ -836,8 +885,7 @@ async function handleAction(target) {
     return;
   }
   if (action === "close-capture") {
-    state.captureOpen = false;
-    render();
+    closeVisibleSheet(() => { state.captureOpen = false; render(); });
     return;
   }
   if (action === "set-collection") { state.activeCollectionId = target.dataset.collectionId || "all"; state.activeTab = "library"; render(); return; }
@@ -846,12 +894,13 @@ async function handleAction(target) {
   if (action === "rename-collection") { const item = state.collections.find((entry) => entry.id === target.dataset.id); const input = target.closest(".collection-management-row")?.querySelector("[data-rename-collection]"); const name = input?.value.trim().slice(0, 60); if (!item || !name) return; if (state.collections.some((entry) => entry.id !== item.id && entry.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } item.name = name; await storage.set(KEYS.collections, state.collections); render(); return; }
   if (action === "delete-collection") { const id = target.dataset.id; const item = state.collections.find((entry) => entry.id === id); if (!item) return; if (!window.confirm(`Delete the “${item.name}” collection? Articles will be kept.`)) return; const articles = await listArticles(); await Promise.all(articles.filter((article) => article.collectionIds?.includes(id)).map((article) => setArticleCollections(article.id, article.collectionIds.filter((entry) => entry !== id)))); state.collections = state.collections.filter((entry) => entry.id !== id); if (state.activeCollectionId === id) state.activeCollectionId = "all"; state.articles = await listArticles(); if (state.article) state.article = state.articles.find((article) => article.id === state.article.id) || state.article; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
   if (action === "open-new-collection") { state.collectionSheet = { type: "new" }; render(); requestAnimationFrame(() => document.querySelector("[data-collection-name]")?.focus()); return; }
-  if (action === "close-collection-sheet") { state.collectionSheet = null; render(); return; }
+  if (action === "close-collection-sheet") { closeVisibleSheet(() => { state.collectionSheet = null; render(); }); return; }
   if (action === "create-collection") { const input = document.querySelector("[data-collection-name]"); const name = input?.value.trim().slice(0, 60); if (!name) return; if (state.collections.some((item) => item.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } state.collections = [...state.collections, { id: `collection-${Date.now()}`, name }]; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
   if (action === "open-organize") { state.collectionSheet = { type: "organize", articleId: target.dataset.id }; render(); return; }
   if (action === "save-article-collections") { const article = state.articles.find((item) => item.id === state.collectionSheet?.articleId); if (article) { const ids = [...document.querySelectorAll("[data-collection-check]:checked")].map((input) => input.value); await setArticleCollections(article.id, ids); state.articles = await listArticles(); if (state.article?.id === article.id) state.article = state.articles.find((item) => item.id === article.id) || state.article; } state.collectionSheet = null; render(); return; }
   if (action === "open-article") {
     invalidateSmryRequest();
+    setViewTransition("forward");
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
     state.collectionSheet = null;
     state.articleScrollTop = 0;
@@ -904,8 +953,7 @@ async function handleAction(target) {
     return;
   }
   if (action === "close-settings") {
-    state.settingsOpen = false;
-    render();
+    closeVisibleSheet(() => { state.settingsOpen = false; render(); });
     return;
   }
   if (action === "set-font") {
@@ -913,6 +961,8 @@ async function handleAction(target) {
     state.settings.font = selectedFont.id;
     state.settings.readerLineHeight = selectedFont.bodyLineHeight;
     state.settings.readerTitleLineHeight = selectedFont.titleLineHeight;
+    applySettings();
+    syncPreferenceControls();
     await ensureFontLoaded(selectedFont.id);
     await persistSettings();
     return;
@@ -1026,14 +1076,15 @@ document.addEventListener("input", (event) => {
     return;
   }
   if (event.target.matches("[data-font-size-range]")) {
-    state.settings.fontSize = Math.min(24, Math.max(14, Number(event.target.value)));
-    applySettings();
-    syncPreferenceControls();
+    queueFontSizePreview(event.target.value);
   }
 });
 
 document.addEventListener("change", (event) => {
-  if (event.target instanceof HTMLInputElement && event.target.matches("[data-font-size-range]")) void persistSettings();
+  if (event.target instanceof HTMLInputElement && event.target.matches("[data-font-size-range]")) {
+    window.clearTimeout(fontSizePersistTimeout);
+    void persistSettings();
+  }
 });
 
 document.addEventListener("scroll", (event) => {
@@ -1144,6 +1195,7 @@ async function init() {
   log("app.ready", `${Capacitor.getPlatform()} · ${Capacitor.isNativePlatform() ? "native HTTP ready" : "web preview"}`);
   await setupNativeBackHandling();
   render();
+  preloadReadingFonts();
 }
 
 initAdaptiveLayout();
