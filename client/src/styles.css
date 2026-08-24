@@ -1,5 +1,6 @@
 /** Editorial Signal: generous newspaper-like hierarchy, neutral paper surfaces, and high-legibility themes. */
 @font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-Medium.woff2") format("woff2");font-style:normal;font-weight:500;font-display:swap}
 @font-face{font-family:"Inter";src:url("./assets/fonts/inter/Inter-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:swap}
 @font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-Regular.woff2") format("woff2");font-style:normal;font-weight:400;font-display:swap}
 @font-face{font-family:"Source Serif 4";src:url("./assets/fonts/source-serif-4/SourceSerif4-SemiBold.woff2") format("woff2");font-style:normal;font-weight:600;font-display:swap}
