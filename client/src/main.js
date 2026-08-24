@@ -12,6 +12,7 @@ import { extractArticle } from "./lib/fetcher.js";
 import { extractSmryArticle, getSmryReaderUrl } from "./lib/smry.js";
 import { sanitizeContent } from "./lib/article-sanitizer.js";
 import { listArticles, migrateLegacyArticles, removeArticle, restoreArticle, saveArticle as storeSaveArticle, setArticleCollections } from "./lib/article-store.js";
+import { initAdaptiveLayout } from "./lib/adaptive-layout.js";
 
 // fetcher_fixed.js is intentionally kept as the supplied browser module; expose
 // the installed Readability implementation for its existing global reference.
@@ -866,4 +867,5 @@ async function init() {
   render();
 }
 
+initAdaptiveLayout();
 void init();
