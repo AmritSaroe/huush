@@ -329,7 +329,7 @@ function currentDayLabel() {
 function bottomNavigationMarkup() {
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
     <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Today</span></button>
-    <button class="bottom-navigation__add" data-action="open-capture" aria-label="Add a reading">${icon("plus", 23)}</button>
+    <button class="bottom-navigation__add" data-action="open-capture" aria-label="Add a reading">${icon("plus", 23)}<span>Add article</span></button>
     <button class="bottom-navigation__item ${state.activeTab === "debug" ? "is-active" : ""}" data-action="show-debug">${icon("terminal", 21)}<span>Debug</span></button>
   </nav>`;
 }
@@ -360,6 +360,7 @@ function libraryMarkup() {
     <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">whitemint</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
     <section class="daily-brief daily-brief--clean"><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
     ${collectionMarkup()}
+    <button class="library-add-button" data-action="open-capture">${icon("plus", 19)}<span>Add article</span></button>
     ${articleListMarkup()}
   </main>${bottomNavigationMarkup()}${captureMarkup()}`;
 }
@@ -643,7 +644,6 @@ async function handleAction(target) {
     state.captureOpen = true;
     state.settingsOpen = false;
     render();
-    requestAnimationFrame(() => document.querySelector("#article-url")?.focus());
     return;
   }
   if (action === "close-capture") {
@@ -749,6 +749,26 @@ async function handleAction(target) {
     render();
   }
 }
+
+function keepFocusedFieldVisible(field) {
+  const sheet = field?.closest(".capture-sheet, .collection-sheet");
+  if (!sheet) return;
+  window.setTimeout(() => {
+    if (document.activeElement !== field) return;
+    const targetTop = Math.max(0, field.offsetTop - Math.round(sheet.clientHeight * 0.42));
+    sheet.scrollTo({ top: targetTop, behavior: "smooth" });
+  }, 160);
+}
+
+document.addEventListener("focusin", (event) => {
+  const field = event.target;
+  if (field instanceof HTMLInputElement && field.matches("#article-url, [data-collection-name], [data-rename-collection]")) keepFocusedFieldVisible(field);
+}, true);
+
+window.visualViewport?.addEventListener("resize", () => {
+  const field = document.activeElement;
+  if (field instanceof HTMLInputElement && field.matches("#article-url, [data-collection-name], [data-rename-collection]")) keepFocusedFieldVisible(field);
+});
 
 document.addEventListener("submit", (event) => {
   if (event.target.matches("#capture-form")) {
