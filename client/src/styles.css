@@ -285,3 +285,8 @@ button:not(:disabled):active{transform:scale(.975);}
   .article-reading__footer{gap:8px 10px}
   .article-reading__footer .collection-organize-button,.article-reading__footer .article-reading__source-action{font-size:13px}
 }
+
+/* End-of-article compactness */
+.article-reading{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.article-reading__footer{margin-top:12px;padding-top:9px;padding-bottom:max(4px,env(safe-area-inset-bottom));min-height:0}
+@media (max-width:599px){.article-reading__footer{margin-top:10px;padding-top:8px;padding-bottom:max(4px,env(safe-area-inset-bottom))}}

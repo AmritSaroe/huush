@@ -242,8 +242,10 @@ function setReaderToolbarHidden(next) {
 function handleReaderScroll(surface) {
   const scrollTop = Math.max(0, surface.scrollTop);
   const delta = scrollTop - readerLastScrollTop;
+  const maxScrollTop = Math.max(0, surface.scrollHeight - surface.clientHeight);
+  const nearArticleEnd = maxScrollTop - scrollTop <= 28;
   state.articleScrollTop = scrollTop;
-  if (scrollTop <= 18) setReaderToolbarHidden(false);
+  if (scrollTop <= 18 || nearArticleEnd) setReaderToolbarHidden(false);
   else if (delta > 5) setReaderToolbarHidden(true);
   else if (delta < -5) setReaderToolbarHidden(false);
   readerLastScrollTop = scrollTop;
