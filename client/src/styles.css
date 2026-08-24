@@ -94,17 +94,17 @@ html[data-theme="sepia"] .article-preview-notice__actions button:first-child{bac
   --shadow:0 18px 46px rgba(0,0,0,.38);
 }
 :root[data-theme="sepia"]{
-  --bg:#eee2c5;
-  --paper:#fffaf0;
+  --bg:#e9d8b1;
+  --paper:#f2e4c6;
   --ink:#3b3024;
   --muted:#756754;
   --faint:#9a8b73;
-  --line:#d8c9aa;
-  --soft:#f4e9d2;
+  --line:#d0bd96;
+  --soft:#e7d4ac;
   --lime:#9d7d37;
   --lime-deep:#8d6d43;
-  --opening:#fffaf0;
-  --nav:#fffaf0;
+  --opening:#f2e4c6;
+  --nav:#f2e4c6;
   --shadow:0 16px 40px rgba(80,58,28,.14);
 }
 html,body,#root{width:100%;height:100%;min-width:320px;min-height:100%;}
