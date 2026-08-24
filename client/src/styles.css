@@ -298,6 +298,7 @@ button:not(:disabled):active{transform:scale(.975);}
   --wm-safe-right:max(env(safe-area-inset-right,0px),var(--wm-native-safe-right,0px));
   --wm-safe-bottom:max(env(safe-area-inset-bottom,0px),var(--wm-native-safe-bottom,0px));
   --wm-safe-left:max(env(safe-area-inset-left,0px),var(--wm-native-safe-left,0px));
+  --wm-keyboard-inset:0px;
   --wm-page-gutter:clamp(20px,5vw,84px);
   --wm-reading-gutter:clamp(20px,6vw,112px);
   --wm-content-measure:76ch;
@@ -306,7 +307,7 @@ button:not(:disabled):active{transform:scale(.975);}
 @supports (height:100dvh){
   .app-shell,.reader-view{height:100dvh;min-height:100svh;}
 }
-.dashboard-screen{padding-inline:var(--wm-page-gutter);padding-bottom:calc(110px + var(--wm-safe-bottom));}
+.dashboard-screen{padding-top:calc(19px + var(--wm-safe-top));padding-inline:var(--wm-page-gutter);padding-bottom:calc(110px + var(--wm-safe-bottom));}
 .article-reading__opening{padding-right:var(--wm-reading-gutter);padding-left:var(--wm-reading-gutter);}
 .article-reading__body{padding-right:var(--wm-reading-gutter);padding-left:var(--wm-reading-gutter);}
 .article-reading__footer{width:auto;margin-right:var(--wm-reading-gutter);margin-left:var(--wm-reading-gutter);}
@@ -402,13 +403,21 @@ html[data-window-height="compact"][data-orientation="landscape"] .article-readin
 /* Native Android insets are merged with browser safe-area values by the WebView bridge. */
 .reader-toolbar{height:max(72px,calc(65px + var(--wm-safe-top)));min-height:max(72px,calc(65px + var(--wm-safe-top)));flex-basis:max(72px,calc(65px + var(--wm-safe-top)));padding-top:calc(12px + var(--wm-safe-top));}
 .settings-sheet,.capture-sheet,.collection-sheet{max-height:min(84dvh,calc(100svh - var(--wm-safe-top)));padding-bottom:calc(27px + var(--wm-safe-bottom));}
+@media (max-width:899px){
+  .settings-sheet,.capture-sheet,.collection-sheet{bottom:var(--wm-keyboard-inset);max-height:min(84dvh,calc(100dvh - var(--wm-safe-top) - var(--wm-keyboard-inset)));}
+}
 @media (max-width:599px){
   .reader-toolbar{height:max(64px,calc(57px + var(--wm-safe-top)));min-height:max(64px,calc(57px + var(--wm-safe-top)));flex-basis:max(64px,calc(57px + var(--wm-safe-top)));padding-top:calc(8px + var(--wm-safe-top));}
 }
 @media (orientation:landscape) and (min-width:600px){
+  .dashboard-screen{padding-top:calc(14px + var(--wm-safe-top));}
   .reader-toolbar{height:max(60px,calc(55px + var(--wm-safe-top)));min-height:max(60px,calc(55px + var(--wm-safe-top)));flex-basis:max(60px,calc(55px + var(--wm-safe-top)));padding-top:calc(7px + var(--wm-safe-top));}
 }
 
 
 /* Keep toolbar collapse authoritative after inset-aware height rules. */
 .reader-toolbar.is-hidden{height:0;min-height:0;flex-basis:0;padding-top:0;padding-bottom:0;}
+
+@media (min-width:900px){
+  .dashboard-screen{padding-top:calc(42px + var(--wm-safe-top));}
+}

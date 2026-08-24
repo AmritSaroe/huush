@@ -29,15 +29,21 @@ function setViewportState() {
   const widthClass = classify(width, WIDTH_CLASSES);
   const heightClass = classify(height, HEIGHT_CLASSES);
   const orientation = width >= height ? "landscape" : "portrait";
+  const layoutHeight = Math.max(1, Math.round(window.innerHeight || document.documentElement.clientHeight || height));
+  const visualHeight = Math.max(1, Math.round(window.visualViewport?.height || layoutHeight));
+  const visualOffsetTop = Math.max(0, Math.round(window.visualViewport?.offsetTop || 0));
+  const keyboardInset = Math.max(0, layoutHeight - visualHeight - visualOffsetTop);
 
   root.dataset.windowWidth = widthClass;
   root.dataset.windowHeight = heightClass;
   root.dataset.orientation = orientation;
+  root.dataset.keyboard = keyboardInset > 24 ? "open" : "closed";
   root.dataset.adaptiveLayout = "ready";
   root.style.setProperty("--wm-viewport-width", `${width}px`);
   root.style.setProperty("--wm-viewport-height", `${height}px`);
   root.style.setProperty("--wm-viewport-inline", `${Math.max(width, height)}px`);
   root.style.setProperty("--wm-viewport-block", `${Math.min(width, height)}px`);
+  root.style.setProperty("--wm-keyboard-inset", `${keyboardInset}px`);
 }
 
 export function initAdaptiveLayout() {
