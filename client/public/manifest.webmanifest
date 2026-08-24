@@ -1,0 +1,12 @@
+{
+  "name": "huush — quiet reading",
+  "short_name": "huush",
+  "description": "A quiet, private space for the articles worth keeping.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FAFAF8",
+  "theme_color": "#FAFAF8",
+  "lang": "en",
+  "dir": "ltr"
+}

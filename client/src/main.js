@@ -318,12 +318,20 @@ function nextThemePreference() {
   return cycle[(cycle.indexOf(state.settings.theme) + 1) % cycle.length] || "light";
 }
 
+function syncBrowserThemeColor(theme) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const colors = { light: "#FAFAF8", dark: "#141414", sepia: "#F6F0E2" };
+  meta.setAttribute("content", colors[theme] || colors.light);
+}
+
 function applySettings() {
   const root = document.documentElement;
   const theme = effectiveTheme();
   root.dataset.theme = theme;
   root.dataset.themePreference = state.settings.theme;
   root.dataset.readingFont = state.settings.font;
+  syncBrowserThemeColor(theme);
   root.dataset.nativePlatform = Capacitor.isNativePlatform() ? "true" : "false";
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
   root.style.setProperty("--reader-line-height", String(state.settings.readerLineHeight || 1.6));
@@ -557,10 +565,16 @@ function currentDayLabel() {
 }
 
 function bottomNavigationMarkup() {
+  const current = (tab) => state.activeTab === tab ? 'aria-current="page"' : "";
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
-    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Library</span></button>
-    <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags">${icon("archive", 21)}<span>Tags</span></button>
-    <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings">${icon("settings", 21)}<span>Settings</span></button>
+    <div class="bottom-navigation__brand">${logoMarkup(true)}<span>Quiet reading</span></div>
+    <div class="bottom-navigation__items">
+      <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library" ${current("library")}>${icon("home", 21)}<span>Library</span></button>
+      <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags" ${current("tags")}>${icon("archive", 21)}<span>Tags</span></button>
+      <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings" ${current("settings")}>${icon("settings", 21)}<span>Settings</span></button>
+    </div>
+    <button class="bottom-navigation__add" type="button" data-action="open-capture">${icon("plus", 18)}<span>Add article</span></button>
+    <p class="bottom-navigation__footer">huush — quiet the web</p>
   </nav>`;
 }
 
@@ -596,6 +610,11 @@ function librarySearchMarkup() {
   return `<label class="library-search"><span class="sr-only">Search saved articles</span>${icon("search", 18)}<input data-search-articles type="search" value="${escapeHtml(state.searchQuery)}" placeholder="Search saved articles..." autocomplete="off" /></label>`;
 }
 
+function webFeatureStripMarkup() {
+  if (state.articles.length || state.searchQuery.trim() || state.activeCollectionId !== "all") return "";
+  return `<section class="web-feature-strip" aria-label="Why use huush"><article><span>${icon("book", 19)}</span><div><strong>Clean reading</strong><small>Strips ads and distractions.</small></div></article><article><span>${icon("mark", 19)}</span><div><strong>Private by default</strong><small>Your library stays on this device.</small></div></article><article><span>${icon("bookmark", 19)}</span><div><strong>Save for later</strong><small>Keep the articles worth returning to.</small></div></article></section>`;
+}
+
 function libraryMarkup() {
   return `<main class="dashboard-screen editorial-library">
     <header class="editorial-topbar editorial-topbar--clean"><span class="editorial-topbar__brand">huush</span><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
@@ -604,6 +623,7 @@ function libraryMarkup() {
     ${collectionMarkup()}
     ${librarySearchMarkup()}
     ${articleListMarkup()}
+    ${webFeatureStripMarkup()}
   </main>${bottomNavigationMarkup()}${captureMarkup()}`;
 }
 
