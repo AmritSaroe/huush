@@ -647,7 +647,6 @@ async function handleAction(target) {
     state.readerToolbarHidden = false;
     readerLastScrollTop = 0;
     log("debug.opened", "User opened diagnostics");
-    render();
     return;
   }
   if (action === "open-capture") {
