@@ -570,7 +570,6 @@ function bottomNavigationMarkup() {
       <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags" ${current("tags")}>${icon("archive", 21)}<span>Tags</span></button>
       <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings" ${current("settings")}>${icon("settings", 21)}<span>Settings</span></button>
     </div>
-    <button class="bottom-navigation__add" type="button" data-action="open-capture">${icon("plus", 18)}<span>Add article</span></button>
     <p class="bottom-navigation__footer">huush — quiet the web</p>
   </nav>`;
 }
