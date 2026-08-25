@@ -21,3 +21,18 @@ Sepia verification: Settings opened from Tags and Sepia was selected in place. T
 
 
 Open-book correction verification: after reloading the live Vite app, the Library header and lockup visibly showed the outlined open-book mark. Live DOM inspection found two `.quiet-mark` instances, both containing the approved mockup open-book paths, zero wave-mark paths, three navigation labels (Library, Tags, Settings), zero `.bottom-navigation__add` elements, and the Library navigation SVG matched the same open-book path family.
+
+
+Text-size label fix verification: after reloading the Vite app and opening Settings, the rendered Text size section contains the single `Text size` heading, decrement/increment controls, slider, and 14–24 scale ticks. The redundant visible `18px` value and `Default` chip are absent; the selected scale tick remains available as the current-position indicator. The browser app stayed on the same Settings screen with no APK build performed.
+
+
+Duplicate Library branding fix: the live browser app now renders one `.library-lockup` containing the sole visible `huush` wordmark. The Library top bar contains zero `.editorial-topbar__brand` elements, while its search button remains present and the navigation remains Library/Tags/Settings.
+
+
+Settings branding fix: the live browser app now shows no centered Huush logo in the Settings header. The back button remains at the top-left, the “Keep your signal clear.” hierarchy begins below it, the single Text size heading remains, and Library/Tags/Settings navigation is unchanged.
+
+
+Final combined verification — Library: the live Vite app renders one Library editorial lockup (`huush`), zero Library top-bar brand elements, one approved open-book mark path, zero navigation Add elements, three navigation labels (Library, Tags, Settings), and one retained inline capture submit button.
+
+
+Final combined verification — Settings: the live Vite app renders zero Settings brand elements, one Return-to-Library back button, one `Text size` heading, no visible `[data-setting-size]` or `[data-size-default]` labels, and the same Library/Tags/Settings navigation.
