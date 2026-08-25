@@ -42,15 +42,15 @@ public class MainActivity extends BridgeActivity {
         WindowCompat.setDecorFitsSystemWindows(window, true);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setBackgroundDrawableResource(R.color.huush_surface_light);
-        window.setStatusBarColor(Color.parseColor("#F7F3EB"));
-        window.setNavigationBarColor(Color.parseColor("#F7F3EB"));
+        window.setStatusBarColor(Color.parseColor("#F6F1E8"));
+        window.setNavigationBarColor(Color.parseColor("#F6F1E8"));
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.setNavigationBarDividerColor(Color.parseColor("#F7F3EB"));
+            window.setNavigationBarDividerColor(Color.parseColor("#F6F1E8"));
         }
 
         WebView webView = getBridge() == null ? null : getBridge().getWebView();
         if (webView != null) {
-            webView.setBackgroundColor(Color.parseColor("#F7F3EB"));
+            webView.setBackgroundColor(Color.parseColor("#F6F1E8"));
             // The bundled local WebView content is trusted application code.
             webView.addJavascriptInterface(new StartupBridge(), "HuushStartup");
             webView.postInvalidateOnAnimation();
