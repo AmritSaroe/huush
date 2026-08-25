@@ -8,7 +8,7 @@ PAPER = (252, 250, 245, 255)
 TRANSPARENT = (0, 0, 0, 0)
 
 
-def bezier(p0, p1, p2, p3, t):
+def cubic(p0, p1, p2, p3, t):
     u = 1 - t
     return (
         u**3 * p0[0] + 3 * u**2 * t * p1[0] + 3 * u * t**2 * p2[0] + t**3 * p3[0],
@@ -16,21 +16,35 @@ def bezier(p0, p1, p2, p3, t):
     )
 
 
-def wave_points(size, y, amplitude):
-    left = size * 0.22
-    right = size * 0.78
-    points = []
-    segments = [
-        ((left, y), (size * 0.30, y - amplitude), (size * 0.37, y + amplitude), (size * 0.44, y)),
-        ((size * 0.44, y), (size * 0.51, y - amplitude), (size * 0.58, y + amplitude), (size * 0.65, y)),
-        ((size * 0.65, y), (size * 0.72, y - amplitude), (size * 0.76, y + amplitude * 0.7), (right, y)),
-    ]
-    for segment in segments:
-        for step in range(13):
-            if points and step == 0:
-                continue
-            points.append(bezier(*segment, step / 12))
-    return points
+def open_book_points(size):
+    scale = size / 24
+
+    def point(x, y):
+        return (x * scale, y * scale)
+
+    def curve(start, control_a, control_b, end):
+        return [point(*cubic(start, control_a, control_b, end, step / 16)) for step in range(17)]
+
+    left = curve((4.5, 5.5), (7.3, 4.7), (9.7, 5.2), (12, 7))
+    left += [point(12, 20)]
+    left += curve((12, 20), (9.7, 18.2), (7.3, 16.2), (4.5, 18.5))[1:]
+    left += [point(4.5, 5.5)]
+
+    right = curve((19.5, 5.5), (16.7, 4.7), (14.3, 5.2), (12, 7))
+    right += [point(12, 20)]
+    right += curve((12, 20), (14.3, 18.2), (16.7, 16.2), (19.5, 18.5))[1:]
+    right += [point(19.5, 5.5)]
+    center = [point(12, 7), point(12, 20)]
+    return left, right, center
+
+
+def draw_open_book(draw, size, origin=(0, 0), stroke=None):
+    stroke = stroke or max(1, round(size * 0.022))
+    left, right, center = open_book_points(size)
+    ox, oy = origin
+    for points in (left, right, center):
+        shifted = [(x + ox, y + oy) for x, y in points]
+        draw.line(shifted, fill=INK, width=stroke, joint="curve")
 
 
 def draw_mark(size, transparent=False):
@@ -39,11 +53,9 @@ def draw_mark(size, transparent=False):
     inset = round(size * 0.18)
     radius = round(size * 0.13)
     draw.rounded_rectangle((inset, inset, size - inset, size - inset), radius=radius, fill=PAPER)
-    stroke = max(1, round(size * 0.022))
-    amplitude = size * 0.065
-    for y_ratio in (0.38, 0.50, 0.62):
-        points = wave_points(size, size * y_ratio, amplitude)
-        draw.line(points, fill=INK, width=stroke, joint="curve")
+    book_size = size * 0.56
+    book_origin = ((size - book_size) / 2, (size - book_size) / 2)
+    draw_open_book(draw, book_size, book_origin, max(1, round(size * 0.022)))
     return image
 
 
@@ -54,4 +66,4 @@ for density, size in SIZES.items():
     draw_mark(size, transparent=False).save(folder / "ic_launcher_round.png")
     draw_mark(size, transparent=True).save(folder / "ic_launcher_foreground.png")
 
-print("Generated Huush launcher fallbacks:", ", ".join(f"{k}={v}px" for k, v in SIZES.items()))
+print("Generated Huush open-book launcher fallbacks:", ", ".join(f"{k}={v}px" for k, v in SIZES.items()))

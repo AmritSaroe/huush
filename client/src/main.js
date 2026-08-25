@@ -530,10 +530,10 @@ function icon(name, size = 20) {
     bookmark: "<path d=\"M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V22l-6-3.5L6 22V4.5Z\"/>",
     copy: "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"2\"/><path d=\"M5 15V5a1 1 0 0 1 1-1h10\"/>",
     share: "<circle cx=\"18\" cy=\"5\" r=\"2\"/><circle cx=\"6\" cy=\"12\" r=\"2\"/><circle cx=\"18\" cy=\"19\" r=\"2\"/><path d=\"m8 11 8-5M8 13l8 5\"/>",
-    book: "<path d=\"M4.5 5.5A2.5 2.5 0 0 1 7 3h4v16H7a2.5 2.5 0 0 0-2.5 2V5.5ZM19.5 5.5A2.5 2.5 0 0 0 17 3h-4v16h4a2.5 2.5 0 0 1 2.5 2V5.5Z\"/>",
+    book: "<path d=\"M4.5 5.5c2.8-.8 5.2-.3 7.5 1.5v13c-2.3-1.8-4.7-2.3-7.5-1.5v-13Z\"/><path d=\"M19.5 5.5c-2.8-.8-5.2-.3-7.5 1.5v13c2.3-1.8 4.7-2.3 7.5-1.5v-13Z\"/><path d=\"M12 7v13\"/>",
     terminal: "<path d=\"m5 7 4 5-4 5M12 17h7\"/>",
     search: "<circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4.5 4.5\"/>",
-    mark: "<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"4\"/><path d=\"M6.5 8c2-2 3.5 2 5.5 0s3.5 2 5.5 0M6.5 12c2-2 3.5 2 5.5 0s3.5 2 5.5 0M6.5 16c2-2 3.5 2 5.5 0s3.5 2 5.5 0\"/>",
+    mark: "<path d=\"M4.5 5.5c2.8-.8 5.2-.3 7.5 1.5v13c-2.3-1.8-4.7-2.3-7.5-1.5v-13Z\"/><path d=\"M19.5 5.5c-2.8-.8-5.2-.3-7.5 1.5v13c2.3-1.8 4.7-2.3 7.5-1.5v-13Z\"/><path d=\"M12 7v13\"/>",
     home: "<path d=\"m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z\"/>",
     archive: "<path d=\"M4 6h16v14H4z\"/><path d=\"M3 3h18v3H3zM9 11h6\"/>",
     tag: "<path d=\"m20 13-7 7-9-9V4h7l9 9Z\"/><circle cx=\"8.5\" cy=\"8.5\" r=\"1.2\" fill=\"currentColor\" stroke=\"none\"/>",
@@ -549,7 +549,7 @@ function icon(name, size = 20) {
 }
 
 function quietMarkMarkup() {
-  return `<svg class="quiet-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="6" width="50" height="52" rx="11" fill="var(--mark-paper,#FCFAF5)"/><path d="M15 22c6-6 11 6 17 0s11 6 17 0M15 32c6-6 11 6 17 0s11 6 17 0M15 42c6-6 11 6 17 0s11 6 17 0" fill="none" stroke="var(--mark-ink,#1B1A18)" stroke-linecap="round" stroke-width="2.1"/></svg>`;
+  return `<svg class="quiet-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="6" width="50" height="52" rx="11" fill="var(--mark-paper,#FCFAF5)"/><g transform="translate(9.5 9.5) scale(1.88)" fill="none" stroke="var(--mark-ink,#1B1A18)" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"><path d="M4.5 5.5c2.8-.8 5.2-.3 7.5 1.5v13c-2.3-1.8-4.7-2.3-7.5-1.5v-13Z"/><path d="M19.5 5.5c-2.8-.8-5.2-.3-7.5 1.5v13c2.3-1.8 4.7-2.3 7.5-1.5v-13Z"/><path d="M12 7v13"/></g></svg>`;
 }
 
 function logoMarkup(compact = false) {

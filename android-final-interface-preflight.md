@@ -12,7 +12,7 @@ The renderer stays vanilla JavaScript. No React, Tailwind, shadcn, external icon
 |---|---|---|
 | Dashboard navigation | Four bottom/side items including a centered Add action | Use three stable items only: Library, Tags, Settings. Remove the centered `+ article` navigation action at every breakpoint. |
 | Article entry | Library inline capture plus separate Add navigation action | Keep the Library inline public-link capture field and its plus submit button. It is the single obvious article-entry path; the removed nav Add must not be recreated. |
-| Huush identity | Legacy open-book/H mark remained in app and native resources | Use a cream rounded-square mark with three thin black crossed/stacked wave strokes, constructed as inline SVG/vector geometry. Keep live serif `huush` text as the wordmark. |
+| Huush identity | Legacy open-book/H mark remained in app and native resources | Use the approved thin outlined open-book mark from the HTML mockup on a cream rounded-square surface, constructed as inline SVG/vector geometry. Keep live serif `huush` text as the wordmark. |
 | Launcher and splash | Adaptive, monochrome, splash, and density PNG resources could still show the old mark | Synchronize adaptive foreground, monochrome layer, splash drawable, adaptive background, and every legacy density fallback with the new mark. One UI launcher cache may require uninstall/reinstall or launcher cache clearing during device verification. |
 | Shared icon language | Mixed legacy glyph geometry and heavier strokes | Use thin outline SVGs in the shared icon helper; use a tag glyph for Tags, while retaining book/library, search, gear, Reader actions, and accessible labels. |
 | Library header | Direct moon/sun theme action | Use Huush identity plus search. Theme remains in Settings and Reader context, matching the approved mockup. |
@@ -53,7 +53,7 @@ Capture, organization, new-tag, clear-library, reader-menu, and reader-theme she
 
 ## Icon and typography contract
 
-The primary Huush mark is an accessible decorative inline SVG with a cream rounded-square surface and three thin black crossed/stacked wave strokes. Native launcher and splash resources use the same geometry. The live wordmark is serif `huush` text and is never baked into the native icon.
+The primary Huush mark is an accessible decorative inline SVG with a cream rounded-square surface and the approved thin outlined open-book glyph from the HTML mockup. Native launcher and splash resources use the same geometry. The live wordmark is serif `huush` text and is never baked into the native icon.
 
 Interface icons are inline SVGs in a 24px viewBox with a thin 1.6px round stroke. Decorative SVGs are aria-hidden; buttons own labels. The core language is open book for Library, tag for Tags, gear for Settings, plus for the Library capture field, arrow-back/bookmark/share/more/theme for Reader, and trash only for destructive actions. No source-initial badge is used on cards.
 

@@ -2,10 +2,10 @@
 
 At `http://localhost:4176/`, the real Vite app rendered the Library screen with a cream paper surface, live Huush wordmark, Library inline capture field and Add article button, collections, and exactly three bottom/side navigation items: Library, Tags, Settings. No centered navigation Add control was rendered.
 
-Settings opened through the rendered navigation and showed all four reading font cards (Inter, Source Serif 4, Merriweather, Literata), text-size slider, System/Light/Dark/Sepia theme choices, storage/about sections, and the same three navigation items. The screenshot state used a light/sepia-like paper surface; the cream mark surface is intentionally close to the paper in that theme, while the three ink strokes remain visible. Further Dark-theme verification is required because it provides the strongest contrast check for the cream rounded-square mark.
+Settings opened through the rendered navigation and showed all four reading font cards (Inter, Source Serif 4, Merriweather, Literata), text-size slider, System/Light/Dark/Sepia theme choices, storage/about sections, and the same three navigation items. The screenshot state used a light/sepia-like paper surface; the cream mark surface is intentionally close to the paper in that theme, while the open-book glyph remains visible. Further Dark-theme verification is required because it provides the strongest contrast check for the cream rounded-square mark.
 
 
-Dark-theme verification: Settings switched to Dark without a full-page reload, the cream rounded-square Huush mark with three dark wave strokes was visible in the header, font cards and theme cards retained readable contrast, and the three-item navigation remained present. Returning toward the top moved the Settings internal scroll container rather than resetting the document state. The new mark is visually distinct in Dark as intended.
+Dark-theme verification: Settings switched to Dark without a full-page reload, the cream rounded-square Huush mark with the dark open-book glyph was visible in the header, font cards and theme cards retained readable contrast, and the three-item navigation remained present. Returning toward the top moved the Settings internal scroll container rather than resetting the document state. The new mark is visually distinct in Dark as intended.
 
 
 Library/capture verification: returning from Settings preserved the Dark theme and showed the new cream-square mark clearly. The rendered navigation contained only Library, Tags, and Settings. The empty-library “Add your first article” action opened the capture sheet with its URL field and plus submit button, confirming that article capture remains available through Library only.
@@ -18,3 +18,6 @@ Live DOM audit via the browser console reported `innerWidth: 1280`, `.app-shell`
 
 
 Sepia verification: Settings opened from Tags and Sepia was selected in place. The preview, controls, storage, and About sections remained on the same screen, with no full reload; the warm brown text on cream surface remained legible and the three-item navigation stayed consistent.
+
+
+Open-book correction verification: after reloading the live Vite app, the Library header and lockup visibly showed the outlined open-book mark. Live DOM inspection found two `.quiet-mark` instances, both containing the approved mockup open-book paths, zero wave-mark paths, three navigation labels (Library, Tags, Settings), zero `.bottom-navigation__add` elements, and the Library navigation SVG matched the same open-book path family.
