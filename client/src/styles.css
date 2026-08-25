@@ -1293,3 +1293,18 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
 
 /* Collection sheets inherit the active semantic surface */
 .collection-name-label{color:var(--ink);font-size:13px}.collection-name-label input{border-color:var(--line);background:var(--soft);color:var(--ink);outline:0}.collection-name-label input::placeholder{color:var(--faint)}.collection-name-label input:focus{border-color:var(--ink);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}.collection-management-actions input{background:var(--soft);color:var(--ink)}.collection-management-actions button{background:transparent;color:var(--ink)}.collection-management-actions .collection-delete{color:var(--danger);border-color:var(--danger)}
+
+/* Screenshot-authoritative Huush mark and three-item navigation */
+:root{--mark-paper:#FCFAF5;--mark-ink:#1B1A18}
+:root[data-theme="sepia"]{--mark-paper:#F7EDDC;--mark-ink:#473627}
+:root[data-theme="dark"]{--mark-paper:#FCFAF5;--mark-ink:#171716}
+.quiet-mark{display:block;width:100%;height:100%}.quiet-mark rect{vector-effect:non-scaling-stroke}.brand__mark,.library-lockup__mark{color:var(--mark-ink)}
+.bottom-navigation{grid-template-columns:repeat(3,minmax(0,1fr))}.bottom-navigation__add{display:none!important}
+@media (min-width:900px){.bottom-navigation{display:flex;flex-direction:column}.bottom-navigation__item{flex:0 0 auto}.bottom-navigation__item:nth-child(1){margin-top:auto}}
+
+/* Final identity/layout safeguards */
+.reader-toolbar__identity .brand__mark{display:grid;width:26px;height:26px}
+.reader-toolbar__identity .brand{gap:7px}
+.bottom-navigation{width:100%;max-width:none;margin:0}
+.bottom-navigation__item{min-width:48px;min-height:48px}
+@media (min-width:900px){.bottom-navigation{width:232px;margin:0}.bottom-navigation__item{min-height:48px}}

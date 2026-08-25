@@ -522,7 +522,7 @@ async function saveArticle(article) {
 }
 
 function icon(name, size = 20) {
-  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
   const paths = {
     plus: "<path d=\"M12 5v14M5 12h14\"/>",
     arrowLeft: "<path d=\"M19 12H5M12 19l-7-7 7-7\"/>",
@@ -533,9 +533,10 @@ function icon(name, size = 20) {
     book: "<path d=\"M4.5 5.5A2.5 2.5 0 0 1 7 3h4v16H7a2.5 2.5 0 0 0-2.5 2V5.5ZM19.5 5.5A2.5 2.5 0 0 0 17 3h-4v16h4a2.5 2.5 0 0 1 2.5 2V5.5Z\"/>",
     terminal: "<path d=\"m5 7 4 5-4 5M12 17h7\"/>",
     search: "<circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4.5 4.5\"/>",
-    mark: "<path d=\"M4 4.5h6.15A3.85 3.85 0 0 1 14 8.35V20H7.85A3.85 3.85 0 0 0 4 23V4.5Z\"/><path d=\"M20 4.5h-6.15A3.85 3.85 0 0 0 10 8.35V20h6.15A3.85 3.85 0 0 1 20 23V4.5Z\"/>",
+    mark: "<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"4\"/><path d=\"M6.5 8c2-2 3.5 2 5.5 0s3.5 2 5.5 0M6.5 12c2-2 3.5 2 5.5 0s3.5 2 5.5 0M6.5 16c2-2 3.5 2 5.5 0s3.5 2 5.5 0\"/>",
     home: "<path d=\"m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z\"/>",
     archive: "<path d=\"M4 6h16v14H4z\"/><path d=\"M3 3h18v3H3zM9 11h6\"/>",
+    tag: "<path d=\"m20 13-7 7-9-9V4h7l9 9Z\"/><circle cx=\"8.5\" cy=\"8.5\" r=\"1.2\" fill=\"currentColor\" stroke=\"none\"/>",
     chevron: "<path d=\"m9 18 6-6-6-6\"/>",
     external: "<path d=\"M14 5h5v5M19 5l-8 8\"/><path d=\"M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4\"/>",
     sun: "<circle cx=\"12\" cy=\"12\" r=\"3.25\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/>",
@@ -548,7 +549,7 @@ function icon(name, size = 20) {
 }
 
 function quietMarkMarkup() {
-  return `<svg class="quiet-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M11 10h13c8 0 13 4 13 11v33H24c-8 0-13-4-13-11V10Z" fill="currentColor"/><path d="M53 10H40c-8 0-13 4-13 11v33h13c8 0 13-4 13-11V10Z" fill="currentColor"/><path d="M21 26c6 0 10 2 14 5M21 33c6 0 10 2 14 5M43 26c-6 0-10 2-14 5M43 33c-6 0-10 2-14 5" fill="none" stroke="var(--brand-paper,var(--paper))" stroke-linecap="round" stroke-width="1.6"/><path d="M28 42l4-3 4 3" fill="none" stroke="var(--brand-paper,var(--paper))" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/></svg>`;
+  return `<svg class="quiet-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="6" width="50" height="52" rx="11" fill="var(--mark-paper,#FCFAF5)"/><path d="M15 22c6-6 11 6 17 0s11 6 17 0M15 32c6-6 11 6 17 0s11 6 17 0M15 42c6-6 11 6 17 0s11 6 17 0" fill="none" stroke="var(--mark-ink,#1B1A18)" stroke-linecap="round" stroke-width="2.1"/></svg>`;
 }
 
 function logoMarkup(compact = false) {
@@ -567,8 +568,7 @@ function currentDayLabel() {
 function bottomNavigationMarkup() {
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
     <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("book", 21)}<span>Library</span></button>
-    <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags">${icon("archive", 21)}<span>Tags</span></button>
-    <button class="bottom-navigation__add" data-action="open-capture" aria-label="Add article">${icon("plus", 22)}</button>
+    <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags">${icon("tag", 21)}<span>Tags</span></button>
     <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings">${icon("settings", 21)}<span>Settings</span></button>
   </nav>`;
 }
@@ -617,7 +617,7 @@ function libraryMarkup() {
 
 function tagsPageMarkup() {
   const countFor = (id) => state.articles.filter((article) => article.collectionIds?.includes(id)).length;
-  return `<main class="dashboard-screen tags-screen"><header class="editorial-topbar editorial-topbar--clean"><div class="editorial-topbar__brand">${logoMarkup(true)}</div><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header><section class="daily-brief daily-brief--clean"><h1>Find your<br /><em>next read.</em></h1><div class="quiet-gutter-mark" aria-hidden="true"></div></section><section class="tags-heading"><div class="tags-heading__row"><div><p>Organize your library</p><h2>Tags</h2></div><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New tag</button></div></section>${state.collections.length ? `<div class="tag-list" aria-label="Saved tags">${state.collections.map((item) => `<button class="tag-list__item" data-action="open-tag" data-collection-id="${escapeHtml(item.id)}"><span class="tag-list__icon">${icon("archive", 21)}</span><span><strong>${escapeHtml(item.name)}</strong><small>${countFor(item.id)} ${countFor(item.id) === 1 ? "article" : "articles"}</small></span>${icon("chevron", 19)}</button>`).join("")}</div>` : `<section class="empty-library tags-empty"><span class="empty-library__icon">${icon("archive", 31)}</span><div><h2>No tags yet.</h2><p>Create a collection from Library to organize saved articles.</p></div></section>`}</main>${bottomNavigationMarkup()}`;
+  return `<main class="dashboard-screen tags-screen"><header class="editorial-topbar editorial-topbar--clean"><div class="editorial-topbar__brand">${logoMarkup(true)}</div><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header><section class="daily-brief daily-brief--clean"><h1>Find your<br /><em>next read.</em></h1><div class="quiet-gutter-mark" aria-hidden="true"></div></section><section class="tags-heading"><div class="tags-heading__row"><div><p>Organize your library</p><h2>Tags</h2></div><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New tag</button></div></section>${state.collections.length ? `<div class="tag-list" aria-label="Saved tags">${state.collections.map((item) => `<button class="tag-list__item" data-action="open-tag" data-collection-id="${escapeHtml(item.id)}"><span class="tag-list__icon">${icon("tag", 21)}</span><span><strong>${escapeHtml(item.name)}</strong><small>${countFor(item.id)} ${countFor(item.id) === 1 ? "article" : "articles"}</small></span>${icon("chevron", 19)}</button>`).join("")}</div>` : `<section class="empty-library tags-empty"><span class="empty-library__icon">${icon("tag", 31)}</span><div><h2>No tags yet.</h2><p>Create a collection from Library to organize saved articles.</p></div></section>`}</main>${bottomNavigationMarkup()}`;
 }
 
 function captureMarkup() {
