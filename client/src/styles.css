@@ -1222,3 +1222,31 @@ button,input { -webkit-tap-highlight-color:transparent; }
   .library-lockup { margin-bottom:28px; }
   .daily-brief--clean > h1 { margin-top:36px; }
 }
+
+/* Font picker contrast fix: active card text must follow the active card surface. */
+:where(.settings-sheet, .settings-screen) .font-chip {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--brand-line);
+}
+:where(.settings-sheet, .settings-screen) .font-chip > span,
+:where(.settings-sheet, .settings-screen) .font-chip > small {
+  color: inherit;
+}
+:where(.settings-sheet, .settings-screen) .font-chip.is-active {
+  background: var(--brand-ink);
+  color: var(--brand-paper);
+  border-color: var(--brand-ink);
+}
+:where(.settings-sheet, .settings-screen) .font-chip.is-active > span,
+:where(.settings-sheet, .settings-screen) .font-chip.is-active > small {
+  color: var(--brand-paper) !important;
+}
+:where(.settings-sheet, .settings-screen) .font-chip__check {
+  background: transparent;
+  color: transparent;
+}
+:where(.settings-sheet, .settings-screen) .font-chip.is-active .font-chip__check {
+  background: var(--brand-paper);
+  color: var(--brand-ink);
+}
