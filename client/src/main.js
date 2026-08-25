@@ -1475,6 +1475,19 @@ async function setupAppLifecycleLogging() {
   }
 }
 
+function signalNativeStartupReady() {
+  if (!Capacitor.isNativePlatform()) return;
+  const notify = () => {
+    try { window.HuushStartup?.markReady?.(); } catch { /* native bridge may be unavailable in a browser preview */ }
+  };
+  // Let the first render reach the compositor before releasing the native splash.
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(notify));
+  } else {
+    notify();
+  }
+}
+
 async function init() {
   const [legacyArticles, savedSettings, savedLegacyLogs, savedCollections] = await Promise.all([storage.get(KEYS.articles, []), storage.get(KEYS.settings, DEFAULT_SETTINGS), storage.get("whitemint:logs", []), storage.get(KEYS.collections, [])]);
   state.settings = normalizeSettings(savedSettings);
@@ -1494,6 +1507,7 @@ async function init() {
   await setupNativeBackHandling();
   await setupAppLifecycleLogging();
   render();
+  signalNativeStartupReady();
   preloadReadingFonts();
 }
 
