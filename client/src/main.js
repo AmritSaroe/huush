@@ -537,6 +537,8 @@ function icon(name, size = 20) {
     sun: "<circle cx=\"12\" cy=\"12\" r=\"3.25\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41\"/>",
     moon: "<path d=\"M20.6 14.4A8.8 8.8 0 0 1 9.6 3.4 8.8 8.8 0 1 0 20.6 14.4Z\"/>",
     trash: "<path d=\"M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3\"/>",
+    menu: "<path d=\"M4 7h16M4 12h16M4 17h16\"/>",
+    circle: "<circle cx=\"12\" cy=\"12\" r=\"7.5\"/>",
   };
   return `<svg ${attrs}>${paths[name] || ""}</svg>`;
 }
@@ -565,9 +567,9 @@ function currentDayLabel() {
 
 function bottomNavigationMarkup() {
   return `<nav class="bottom-navigation" aria-label="Primary navigation">
-    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("home", 21)}<span>Library</span></button>
-    <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags">${icon("archive", 21)}<span>Tags</span></button>
-    <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings">${icon("settings", 21)}<span>Settings</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "library" ? "is-active" : ""}" data-action="show-library">${icon("mark", 21)}<span>Library</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "tags" ? "is-active" : ""}" data-action="show-tags">${icon("bookmark", 21)}<span>Tags</span></button>
+    <button class="bottom-navigation__item ${state.activeTab === "settings" ? "is-active" : ""}" data-action="show-settings">${icon("circle", 21)}<span>Settings</span></button>
   </nav>`;
 }
 
@@ -607,7 +609,7 @@ function librarySearchMarkup() {
 function libraryMarkup() {
   return `<main class="dashboard-screen editorial-library">
     <header class="editorial-topbar editorial-topbar--clean"><div class="editorial-topbar__brand">${logoMarkup(true)}</div><button class="theme-toggle" data-action="toggle-theme" aria-label="Switch to ${state.settings.theme === "light" ? "dark" : "light"} theme">${icon(state.settings.theme === "light" ? "moon" : "sun", 21)}</button></header>
-    <section class="daily-brief daily-brief--clean"><h1>Your reading,<br /><span>worth keeping.</span></h1><div class="quiet-gutter-mark" aria-hidden="true"></div></section>
+    <section class="daily-brief daily-brief--clean"><div class="library-lockup" aria-label="Huush identity"><div class="library-lockup__mark">${quietMarkMarkup()}</div><div class="library-lockup__word">huush</div><div class="quiet-gutter-mark" aria-hidden="true"></div><p>Worth keeping.</p></div><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
     ${homeCaptureMarkup()}
     ${collectionMarkup()}
     ${librarySearchMarkup()}
@@ -624,7 +626,7 @@ function captureMarkup() {
   if (!state.captureOpen) return "";
   const busy = state.busy ? "is-busy" : "";
   const stage = state.busy ? `<p class="capture-stage" aria-live="polite">${escapeHtml(state.saveStage || "Working…")}</p>` : "";
-  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. huush fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form>${stage}<p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
+  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. huush fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 21)}</button></form>${stage}<p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
 }
 
 function relativeTime(value) {
