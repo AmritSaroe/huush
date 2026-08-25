@@ -4,13 +4,13 @@ const config: CapacitorConfig = {
   appId: "com.amritsaroe.huush",
   appName: "huush",
   webDir: "dist/public",
-  backgroundColor: "#FAFAF8",
+  backgroundColor: "#F7F3EB",
   android: {
     allowMixedContent: false,
-    backgroundColor: "#FAFAF8",
+    backgroundColor: "#F7F3EB",
   },
   ios: {
-    backgroundColor: "#FAFAF8",
+    backgroundColor: "#F7F3EB",
     scrollEnabled: true,
     allowsLinkPreview: false,
   },
