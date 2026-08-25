@@ -36,3 +36,6 @@ Final combined verification — Library: the live Vite app renders one Library e
 
 
 Final combined verification — Settings: the live Vite app renders zero Settings brand elements, one Return-to-Library back button, one `Text size` heading, no visible `[data-setting-size]` or `[data-size-default]` labels, and the same Library/Tags/Settings navigation.
+
+
+Library branding placement fix: the live Vite app now renders one compact `.editorial-topbar__brand` in the Library header, zero `.library-lockup` content blocks, the retained `Worth keeping.` kicker, one search control, and Library/Tags/Settings navigation. The rendered screenshot shows the brand aligned at the upper-left with search at the opposite top corner.

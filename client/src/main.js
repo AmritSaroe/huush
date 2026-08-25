@@ -606,8 +606,8 @@ function librarySearchMarkup() {
 
 function libraryMarkup() {
   return `<main class="dashboard-screen editorial-library">
-    <header class="editorial-topbar editorial-topbar--clean library-topbar"><span class="topbar-spacer" aria-hidden="true"></span><button class="theme-toggle" data-action="toggle-search" aria-label="${state.searchOpen ? "Close" : "Open"} article search">${icon("search", 21)}</button></header>
-    <section class="daily-brief daily-brief--clean"><div class="library-lockup" aria-label="Huush identity"><div class="library-lockup__mark">${quietMarkMarkup()}</div><div class="library-lockup__word">huush</div><div class="quiet-gutter-mark" aria-hidden="true"></div><p>Worth keeping.</p></div><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
+    <header class="editorial-topbar editorial-topbar--clean library-topbar"><div class="editorial-topbar__brand">${logoMarkup(true)}</div><button class="theme-toggle" data-action="toggle-search" aria-label="${state.searchOpen ? "Close" : "Open"} article search">${icon("search", 21)}</button></header>
+    <section class="daily-brief daily-brief--clean"><p class="library-kicker">Worth keeping.</p><h1>Your reading,<br /><span>worth keeping.</span></h1></section>
     ${homeCaptureMarkup()}
     ${collectionMarkup()}
     ${librarySearchMarkup()}
