@@ -1301,3 +1301,14 @@ body{min-width:320px;background:var(--bg);color:var(--ink);}
   html[data-window-width] .article-reading__body-content,
   html[data-window-width] .article-reading__body-divider{max-width:680px!important;margin-right:auto;margin-left:auto;}
 }
+
+/* Article-card actions stay attached to the card instead of floating beside its image. */
+@media (min-width:640px){
+  .editorial-library .article-card-row{display:flex;flex-direction:column;align-items:stretch;}
+  .editorial-library .article-card-actions{display:flex;min-height:40px;align-items:center;justify-content:flex-end;margin-top:-8px;}
+  .editorial-library .article-card__delete-desktop{position:static;display:inline-flex;min-height:36px;align-items:center;justify-content:center;gap:6px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);box-shadow:none;opacity:1;}
+  .editorial-library .article-card__delete-desktop:hover{border-color:var(--negative);background:var(--soft);color:var(--negative);}
+}
+@media (max-width:639px){
+  .editorial-library .article-card-actions{display:none;}
+}
