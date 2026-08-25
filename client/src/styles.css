@@ -1217,3 +1217,27 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(-
   .web-feature-strip strong{font-size:14px;font-weight:600;}
   .web-feature-strip small{color:var(--muted);font-size:13px;line-height:1.45;}
 }
+
+/* Review pass: targeted desktop and responsive polish. */
+.article-reading h1{text-wrap:balance;}
+.empty-library__icon{width:48px;height:48px;border-radius:14px;background:var(--soft);color:var(--faint);opacity:.9;}
+.empty-library__icon svg{width:24px;height:24px;}
+.capture__submit .capture-submit-text{display:none;}
+.settings-info-row--destructive{display:grid;width:100%;grid-template-columns:33px minmax(0,1fr);align-items:center;gap:12px;margin:0;padding:12px 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer;}
+.settings-info-row--destructive strong{color:var(--danger);}
+.settings-info-row--destructive:hover{background:color-mix(in srgb,var(--danger) 6%,transparent);}
+.settings-info-row--destructive:focus-visible{outline:2px solid var(--danger);outline-offset:3px;}
+@media (min-width:1024px){
+  .editorial-library .web-feature-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;max-width:900px;margin:60px auto 0;padding-top:24px;border-top:1px solid var(--line);}
+  .editorial-library .web-feature-strip article{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:start;gap:13px;min-width:0;}
+  .editorial-library .web-feature-strip article>div{display:grid;gap:4px;padding-top:2px;min-width:0;}
+  .article-reading__body{padding-top:32px;}
+  .article-reading__body .article-hero,.article-reading__body figure:first-of-type{margin-top:0;}
+  .article-reading__opening{padding-bottom:32px;}
+  .capture__form--sheet .capture__submit{display:inline-flex;width:auto;min-width:120px;height:61px;flex-basis:auto;align-items:center;justify-content:center;border-radius:999px;padding:0 20px;transform:none;}
+  .capture__form--sheet .capture__submit .capture-submit-text{display:inline;font-size:14px;font-weight:600;}
+  .capture__form--sheet .capture__submit svg{display:none;}
+  .desktop-web-nav__theme{width:40px;height:40px;}
+  .desktop-web-nav__theme svg,.theme-toggle svg{width:18px;height:18px;stroke-width:1.8px;}
+  .reader-toolbar__identity{max-width:35vw;text-align:center;}
+}
