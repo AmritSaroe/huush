@@ -548,6 +548,9 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--ink);}
 .home-url-field input::placeholder{color:var(--faint);}
 .home-capture-submit{display:flex;min-height:52px;align-items:center;justify-content:center;gap:9px;border:1px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--paper);font-size:15px;font-weight:600;}
 .home-capture-submit.is-busy{cursor:wait;}
+.capture-stage{margin:2px 3px 0;color:var(--muted);font-size:13px;line-height:1.35;}
+.capture-sheet .capture-stage{margin:12px 0 0;font-size:13px;}
+
 :root[data-theme="dark"] .home-capture-submit,:root[data-theme="dark"] .bottom-navigation__add{background:var(--paper);border-color:var(--paper);color:var(--ink);}
 :root[data-theme="sepia"] .home-capture-submit{background:var(--ink);border-color:var(--ink);color:var(--paper);}
 .collections-section{margin-bottom:22px;}

@@ -88,8 +88,11 @@ const state = {
   logViewerSearch: "",
   expandedLogKey: "",
   confirmClear: false,
+  saveStage: "",
   viewTransition: "",
 };
+
+const readerContentCache = new Map();
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
 let nativeStatusBarConfigured = false;
@@ -589,7 +592,8 @@ function articleListMarkup() {
 }
 
 function homeCaptureMarkup() {
-  return `<section class="home-capture" aria-label="Save an article"><form class="home-capture-form" id="home-capture-form"><label class="home-url-field"><span class="sr-only">Paste an article link</span>${icon("external", 18)}<input name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="Paste a link..." ${state.busy ? "disabled" : ""} /></label><button class="home-capture-submit ${state.busy ? "is-busy" : ""}" type="submit" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 18)}<span>Add article</span></button></form></section>`;
+  const stage = state.busy ? `<p class="capture-stage" aria-live="polite">${escapeHtml(state.saveStage || "Working…")}</p>` : "";
+  return `<section class="home-capture" aria-label="Save an article"><form class="home-capture-form" id="home-capture-form"><label class="home-url-field"><span class="sr-only">Paste an article link</span>${icon("external", 18)}<input name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="Paste a link..." ${state.busy ? "disabled" : ""} /></label><button class="home-capture-submit ${state.busy ? "is-busy" : ""}" type="submit" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 18)}<span>${state.busy ? "Saving…" : "Add article"}</span></button></form>${stage}</section>`;
 }
 
 function librarySearchMarkup() {
@@ -615,7 +619,8 @@ function tagsPageMarkup() {
 function captureMarkup() {
   if (!state.captureOpen) return "";
   const busy = state.busy ? "is-busy" : "";
-  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. huush fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form><p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
+  const stage = state.busy ? `<p class="capture-stage" aria-live="polite">${escapeHtml(state.saveStage || "Working…")}</p>` : "";
+  return `<div class="capture-backdrop" data-action="close-capture" aria-hidden="true"></div><section class="capture-sheet" role="dialog" aria-modal="true" aria-labelledby="capture-title"><div class="sheet-handle"></div><header class="capture-sheet__header"><div><p>Add to your reading</p><h2 id="capture-title">Save an article.</h2></div><button class="sheet-close" data-action="close-capture">Close</button></header><p class="capture-sheet__intro">Paste one public article link, not a publisher homepage or section page. huush fetches directly first; incomplete results may be sent to smry.ai for a second extraction.</p><form class="capture__form capture__form--sheet" id="capture-form"><label class="sr-only" for="article-url">Article URL</label><input id="article-url" name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="https://example.com/article" ${state.busy ? "disabled" : ""}/><button class="capture__submit ${busy}" type="submit" aria-label="Extract and save article" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("arrowLeft", 21)}</button></form>${stage}<p class="capture-sheet__note">Saved reading stays private on this device. Source URLs sent to smry.ai are handled under that service’s policies.</p></section>`;
 }
 
 function relativeTime(value) {
@@ -690,6 +695,18 @@ function settingsPageMarkup() {
   return `<main class="dashboard-screen settings-screen"><header class="dashboard-topbar"><button class="profile-tile" data-action="show-library" aria-label="Return to library">${icon("arrowLeft", 22)}</button>${logoMarkup()}<span class="topbar-spacer" aria-hidden="true"></span></header><section class="welcome-copy welcome-copy--compact"><h1>Keep your<br /><em>signal clear.</em></h1></section><section class="settings-section-block settings-reading" aria-labelledby="reading-settings-title"><div class="settings-section-heading"><p>Reading</p><h2 id="reading-settings-title">Make it yours.</h2></div>${settingsPreviewMarkup()}<div class="settings-control-group"><p class="setting-label">Typeface</p><div class="font-chip-grid" role="radiogroup" aria-label="Reading typeface">${fontOptionsMarkup()}</div></div><div class="settings-control-group">${sizeControlMarkup()}</div><div class="settings-control-group"><div class="settings-control-heading"><p class="setting-label">Theme</p><span class="settings-control-hint">${escapeHtml(themeLabel())}</span></div><div class="theme-choice-grid" role="radiogroup" aria-label="Reading theme">${themeOptionsMarkup()}</div></div></section><section class="settings-section-block settings-general" aria-labelledby="general-settings-title"><div class="settings-section-heading"><p>Storage</p><h2 id="general-settings-title">A little housekeeping.</h2></div><div class="settings-info-list"><div class="settings-info-row"><span class="settings-info-row__icon">${icon("archive", 19)}</span><span><strong>Offline storage</strong><small>${state.articles.length} ${state.articles.length === 1 ? "article" : "articles"} saved privately on this device.</small></span></div><div class="settings-info-row"><span class="settings-info-row__icon">${icon("settings", 19)}</span><span><strong>Notifications</strong><small>Not configured. Huush stays quiet until you ask it to.</small></span></div></div><button class="settings-clear-button settings-clear-button--destructive" data-action="clear-data">Clear local library</button></section><section class="settings-section-block settings-about" aria-labelledby="about-settings-title"><div class="settings-section-heading"><p>About</p><h2 id="about-settings-title">Quiet by design.</h2></div><div class="settings-info-list"><button class="about-version-row" data-action="version-tap"><span><strong>App version</strong><small>${APP_VERSION}</small></span></button><button class="about-version-row" data-action="open-licenses"><span><strong>Open source licenses</strong><small>Third-party notices bundled with Huush.</small></span>${icon("chevron", 18)}</button></div></section>${developerOptionsMarkup()}${state.confirmClear ? clearDataConfirmMarkup() : ""}</main>${bottomNavigationMarkup()}`;
   }
 
+function cachedArticleContentMarkup(article) {
+  const id = String(article?.id || "");
+  const content = String(article?.content || "");
+  const baseUrl = String(article?.url || "");
+  const cached = readerContentCache.get(id);
+  if (cached?.content === content && cached.baseUrl === baseUrl) return cached.html;
+  const html = articleContentMarkup(content, baseUrl);
+  readerContentCache.set(id, { content, baseUrl, html });
+  while (readerContentCache.size > 4) readerContentCache.delete(readerContentCache.keys().next().value);
+  return html;
+}
+
 function articleContentMarkup(content = "", baseUrl = "") {
   const template = document.createElement("template");
   template.innerHTML = sanitizeArticleHtml(content, baseUrl);
@@ -739,7 +756,7 @@ function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
-  const content = articleContentMarkup(article.content, article.url);
+  const content = cachedArticleContentMarkup(article);
   return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><div class="reader-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.articleProgress}" style="--progress:${state.articleProgress}%"></div><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity"><span>${escapeHtml(article.source)}</span></div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="toggle-theme" aria-label="Switch to ${nextThemePreference()} theme">${icon(effectiveTheme() === "light" ? "moon" : "sun", 20)}</button><button class="reader-tool reader-tool--font" data-action="open-settings" aria-label="Reading settings"><span aria-hidden="true">Aa</span></button><button class="reader-tool" data-action="copy-source" aria-label="Copy source link">${icon("copy", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source"><span class="source-chip">${escapeHtml(sourceInitials(article.source))}</span>${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
@@ -798,10 +815,21 @@ async function handleExtractUrl(url) {
   log("article.save.start", { url, source: (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "unknown"; } })() });
   let saveStage = "fetch";
   state.busy = true;
+  state.saveStage = "Fetching article…";
   render();
   try {
-    const article = await extractArticle(url, { log });
+    const article = await extractArticle(url, {
+      log: (event, detail, level = "info") => {
+        log(event, detail, level);
+        if (event === "fetch.smry.started") {
+          state.saveStage = "Public result is short — trying the full extraction route…";
+          render();
+        }
+      },
+    });
     saveStage = "parse";
+    state.saveStage = "Saving article locally…";
+    render();
     const savedArticle = await saveArticle(article);
     saveStage = "store";
     const imageCount = (article.content || "").match(/<img\b/gi)?.length || 0;
@@ -820,6 +848,7 @@ async function handleExtractUrl(url) {
     showToast(error?.code === "section_page" ? "Paste an individual Economic Times article link, not its homepage or section page." : "Couldn’t save this article. Check the diagnostic log if it continues.", "error");
   } finally {
     state.busy = false;
+    state.saveStage = "";
     render();
   }
 }
