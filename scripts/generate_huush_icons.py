@@ -39,7 +39,7 @@ def cubic(p0, p1, p2, p3, t):
 
 
 def mark_geometry(canvas_size):
-    symbol_width = canvas_size * 0.52
+    symbol_width = canvas_size * 0.49
     symbol_height = symbol_width * 328 / 305
     origin_x = (canvas_size - symbol_width) / 2
     origin_y = (canvas_size - symbol_height) / 2
@@ -53,7 +53,7 @@ def mark_geometry(canvas_size):
         left = [cubic(*curve, step / 20) for step in range(21)]
         right = [(305 - x, y) for x, y in left]
         lines.extend([[convert(point) for point in left], [convert(point) for point in right]])
-    return outer, lines, max(1, round(canvas_size * 0.018))
+    return outer, lines, max(1, round(canvas_size * 0.022))
 
 
 def draw_mark(size, transparent=False):

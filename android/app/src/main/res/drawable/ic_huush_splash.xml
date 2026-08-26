@@ -16,7 +16,7 @@
             android:fillColor="#00000000"
             android:strokeColor="#F7F0E7"
             android:strokeLineCap="round"
-            android:strokeWidth="5.6"
+            android:strokeWidth="7.2"
             android:pathData="M 34.08,122.34 C 58.18,116.36 84.26,119.39 108.35,130.38 M 270.92,122.34 C 246.82,116.36 220.74,119.39 196.65,130.38 M 34.08,188.60 C 58.18,182.53 84.26,185.57 108.35,196.64 M 270.92,188.60 C 246.82,182.53 220.74,185.57 196.65,196.64" />
     </group>
 </vector>
