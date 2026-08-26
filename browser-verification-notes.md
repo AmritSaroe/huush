@@ -60,3 +60,72 @@ A browser test unlocked Developer options while Settings was scrolled to the low
 ## 2026-08-26 Synchronous developer-option restoration verified
 
 After the hot reload, Settings with Developer options enabled was scrolled to `scrollTop: 1504`. Clicking both **Logging enabled** and **Verbose logging** in immediate succession kept the scroll position at `1504` after each render and at the end. This confirms the synchronous restoration removes the rapid-render race.
+
+
+## 2026-08-26 Android migration human-style regression baseline
+
+The local Android migration branch loads the Library view at `http://127.0.0.1:3001/` with the expected Huush branding, search button, article URL field, Add article action, collection controls, saved article card, and three-item Library/Tags/Settings navigation. The browser rendered the compact mobile-oriented shell inside the current desktop viewport without a visible startup error. Further interaction testing is in progress; this entry records only the initial baseline.
+
+## 2026-08-26 Reader interaction pass
+
+The saved test article opens successfully. The reader header exposes back, saved-state, reader menu, share, reading-surface, Organize, and Open source actions. The reader menu opens as a centered bottom-sheet style panel with Done, Focus mode, Reading settings, Copy source link, and Share article. Focus mode hides the reader chrome while leaving the article content visible and the vertical scroll position intact. No immediate visual inconsistency was found in this path.
+
+## 2026-08-26 Reader focus and footer boundary pass
+
+Escape did not exit Focus mode, but the documented center-tap gesture did restore the reader toolbar. This is acceptable for the touch design because the menu label changes to “Show controls”; Android back is also wired to exit Focus mode. Scrolling the long test article to the end kept the toolbar stable, showed the final paragraphs and both Organize/Open source actions without clipping, and did not reproduce the earlier end-of-page shiver in this browser run.
+
+## 2026-08-26 Capture validation pass
+
+Returning from the reader restored Library at the expected top position. Submitting an empty capture form produced the in-app “Paste a complete article URL first.” toast without navigation or reload. Entering `example.com` and submitting was rejected by the browser’s native `type=url` validation (“Please enter a URL.”), which is appropriate and prevents a network request; the Library surface remained intact.
+
+## 2026-08-26 Saved-article search pass
+
+The Library search control expands inline without a full reload. A matching query filtered the saved card correctly; a non-matching query displayed “No matching articles. Try a different title, source, or keyword.” with a Clear search action. Navigation remained stable and the capture form stayed available. No stale article card remained visible for the non-match.
+
+## 2026-08-26 Settings typography pass
+
+Settings opened with four expected reading fonts and the size range. Selecting Merriweather updated the live preview and selected radio state in place; increasing the size changed the range value from 18 to 19 without resetting the internal Settings scroll. A reproducible inconsistency is present: the Settings UI reports **App version 2.4.4**, while the Android test APK is version `2.5.1-statusbar-test`/code 24. This should be aligned before delivery.
+
+## 2026-08-26 Settings theme pass
+
+Dark and Sepia themes both switched in place without a reload. The selected theme cards, live preview, typeface cards, storage rows, and navigation stayed readable; the previously reported Sepia headline bar was not reproduced. The selected font remained Merriweather and size remained 19 across the theme changes, as expected.
+
+## 2026-08-26 Canonical mobile wide-viewport pass
+
+After applying `data-canonical-ui="mobile"`, the interactive 900px browser view rendered a 720px Android-style surface centered with neutral side bars, circular plus capture action, and three-item bottom navigation. The first standalone headless Chromium screenshots at 390px and 900px captured only the paper background, so that method is timing-sensitive for this Vite app and is not treated as a UI failure; interactive browser rendering remains the authoritative check for this pass. A browser-native screenshot method with an explicit readiness wait will be used before final validation.
+
+## 2026-08-26 Mobile-canonical correction verified at wide viewport
+
+After a cold reload at the 900px browser viewport, the Android branch rendered a centered 720px mobile surface with neutral side bars, a circular plus capture action, compact single-column article cards, and three bottom-navigation items. The Settings view retained the same bottom navigation and bottom-sheet-style behavior. The Settings label now reports `2.5.2-mobile-ui-test`, matching the updated source version planned for the APK.
+
+## 2026-08-26 Wide-browser canonical capture and reader pass
+
+At 900px, the Library capture row now uses the Android circular plus action with the label hidden visually, not the desktop Add article pill. The saved article opens inside the centered 720px mobile reader surface with the compact toolbar, mobile-width typography, Article divider, and no expanded desktop article margins. Submitting the empty form still produces the expected local validation toast.
+
+## 2026-08-26 Wide-browser reader-sheet pass
+
+The reader menu and nested Reading settings both render as bottom sheets at 900px, matching Android rather than desktop dialog geometry. The reader font selection updates the article in place, and closing the nested sheet returns to the same reader surface without resetting the article to the top.
+
+## 2026-08-26 Organization flow pass
+
+The Organize action opens a bottom sheet at the wide test viewport, the Long reads checkbox can be selected, and Save organization closes the sheet without losing the reader position. Returning to Library showed `Long reads · 1`, and selecting that chip displayed the saved article in the collection. The Android-style footer and side-bar spacing remained consistent throughout.
+
+## 2026-08-26 Settings destructive-action and developer pass
+
+The clear-library confirmation now appears as a mobile bottom sheet inside the 720px shell and sits above the persistent bottom navigation; Cancel returned to the same lower scroll position. Reset reading defaults restored Light, Source Serif 4, and 18px with a local success toast and no reload. Logging and Verbose logging toggled independently while the lower Settings scroll position remained stable.
+
+## 2026-08-26 Canonical Tags and collection-sheet pass
+
+Tags now uses the same centered 720px Android surface at the wide browser viewport with the same three-item bottom navigation. New tag opens a bottom sheet inside that surface, and Done returns cleanly to Tags. No desktop sidebar or centered desktop modal appeared.
+
+## 2026-08-26 Stable headless screenshot check
+
+With a 5-second readiness budget and compositor flush, standalone Chromium still captured only the paper background at both 390px and 900px, while the interactive browser consistently rendered the complete app and its screenshots. The blank standalone captures are therefore a harness/startup-context limitation, not evidence of a blank app; DOM output from the same method did render `data-canonical-ui="mobile"` and the expected app markup.
+
+## 2026-08-26 Diagnostics and console pass
+
+The canonical mobile Event log view supports live text filtering and Error/Warn/Info filters; an Error filter with the `article` query correctly displayed “No matching events.” Returning to Settings preserved the mobile shell. Open-source notices appeared as a local toast without a scroll reset. The live console showed no uncaught exception or unhandled rejection during the tested navigation, sheets, settings, and reader flows.
+
+## 2026-08-26 Final first-paint mobile-canonical check
+
+A cold interactive browser start at the wide viewport now shows the Android Library interface immediately: the 720px mobile surface is centered with neutral side bars, the capture action is a circular plus button, article cards remain compact and single-column, and navigation remains Library/Tags/Settings at the bottom. The static HTML marker prevents the old desktop presentation from appearing before JavaScript initialization.

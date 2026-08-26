@@ -332,6 +332,10 @@ function applySettings() {
   root.dataset.themePreference = state.settings.theme;
   root.dataset.readingFont = state.settings.font;
   root.dataset.nativePlatform = Capacitor.isNativePlatform() ? "true" : "false";
+  // The Android branch intentionally uses one mobile-first surface in both the
+  // Capacitor WebView and a wide browser viewport. The desktop WebUI lives on
+  // the separate webapp branch and must not leak into this branch.
+  root.dataset.canonicalUi = "mobile";
   root.style.setProperty("--reader-size", `${state.settings.fontSize}px`);
   root.style.setProperty("--reader-line-height", String(state.settings.readerLineHeight || 1.6));
   root.style.setProperty("--reader-title-line-height", String(state.settings.readerTitleLineHeight || 1.2));
