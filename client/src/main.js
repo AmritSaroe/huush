@@ -616,7 +616,7 @@ function articleListMarkup() {
 
 function homeCaptureMarkup() {
   const stage = state.busy ? `<p class="capture-stage" aria-live="polite">${escapeHtml(state.saveStage || "Working…")}</p>` : "";
-  return `<section class="home-capture" aria-label="Save an article"><form class="home-capture-form" id="home-capture-form"><label class="home-url-field"><span class="sr-only">Paste an article link</span>${icon("external", 18)}<input name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="Paste a link..." ${state.busy ? "disabled" : ""} /></label><button class="home-capture-submit ${state.busy ? "is-busy" : ""}" type="submit" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 18)}<span>${state.busy ? "Saving…" : "Add article"}</span></button></form>${stage}</section>`;
+  return `<section class="home-capture" aria-label="Save an article"><form class="home-capture-form" id="home-capture-form"><label class="home-url-field"><span class="sr-only">Paste an article link</span>${icon("external", 18)}<input name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="Paste a link..." ${state.busy ? "disabled" : ""} /></label><button class="home-capture-submit ${state.busy ? "is-busy" : ""}" type="submit" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 16)}<span>${state.busy ? "Saving…" : "Add article"}</span></button></form>${stage}</section>`;
 }
 
 function librarySearchMarkup() {
