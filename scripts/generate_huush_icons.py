@@ -38,7 +38,7 @@ def cubic(p0, p1, p2, p3, t):
 
 
 def mark_geometry(canvas_size):
-    symbol_width = canvas_size * 0.64
+    symbol_width = canvas_size * 0.48
     symbol_height = symbol_width * 328 / 305
     origin_x = (canvas_size - symbol_width) / 2
     origin_y = (canvas_size - symbol_height) / 2
