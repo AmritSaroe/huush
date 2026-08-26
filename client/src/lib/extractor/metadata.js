@@ -67,15 +67,29 @@ function escapeAttribute(value = "") {
     .replaceAll(">", "&gt;");
 }
 
+function liveMintImageIdentity(parsed) {
+  const filename = decodeURIComponent(parsed.pathname.split("/").pop() || "");
+  const stem = filename.replace(/\.[^.]+$/, "").toLowerCase();
+  // Live Mint rewrites the same CDN asset with different date, size, logo,
+  // and cache-token segments. The first two long numeric tokens remain stable
+  // across the source and transformed variants observed in article HTML.
+  const stableTokens = stem.match(/\d{10,}/g) || [];
+  const stablePrefix = stem.replace(/_\d{10,}.*$/, "");
+  if (stableTokens.length >= 2) return `livemint:${stablePrefix}:${stableTokens.slice(0, 2).join("_")}`;
+  const fallbackStem = stem
+    .replace(/_[a-f0-9]{8}-[a-f0-9-]{27,}$/i, "")
+    .replace(/(?:_\d{10,})+$/, "")
+    .replace(/[-_]+/g, "-");
+  return `livemint:${fallbackStem}`;
+}
+
 export function imageIdentity(value, baseUrl) {
   try {
     const parsed = new URL(value, baseUrl);
-    let pathname = parsed.pathname.replace(/\/+$/, "").toLowerCase();
-    if (parsed.hostname.toLowerCase().endsWith("livemint.com")) {
-      pathname = pathname.replace(/\/(?:\d+x\d+)(?:\/logo)?(?=\/)/i, "");
-      return `${parsed.hostname.toLowerCase()}${pathname}`;
-    }
-    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`;
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname.endsWith("livemint.com")) return liveMintImageIdentity(parsed);
+    const pathname = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+    return `${hostname}${pathname}${parsed.search}`;
   } catch {
     return String(value || "").trim().toLowerCase();
   }
