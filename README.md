@@ -10,9 +10,13 @@ Huush is built Android-first with **Vite**, **Vanilla JavaScript**, **Mozilla Re
 
 The reader keeps the article’s title, source, metadata, lead image, synopsis, and body together in a consistent layout. A restrained reading toolbar provides only the actions needed while reading: return, save, open reader controls, share, and change the reading surface. Light, dark, and sepia themes, four reading typefaces, and adjustable text size make longer reading sessions more comfortable.
 
-![Huush Android reader showing a saved Live Mint article in dark mode](docs/screenshots/android-reader.png)
+![Huush editorial hero: an open book on a warm ivory desk](docs/huush-readme-hero.png)
 
-_The Android reader uses a quiet editorial layout with a dedicated reading toolbar, clear synopsis-to-article separation, and a focused article surface._
+_Huush turns the articles worth keeping into a calm, personal reading space._
+
+![Huush reading illustration showing a phone beside an open book](docs/huush-reading-illustration.png)
+
+_The visual language pairs the familiarity of a book with the convenience of a private digital library._
 
 ## What Huush does
 
