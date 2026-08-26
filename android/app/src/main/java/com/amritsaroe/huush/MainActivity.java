@@ -3,7 +3,9 @@ package com.amritsaroe.huush;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -13,6 +15,7 @@ import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
@@ -27,6 +30,7 @@ public class MainActivity extends BridgeActivity {
     private volatile boolean readinessRequested = false;
     private boolean reportedFullyDrawn = false;
     private long startupStartedAt;
+    private View statusBarScrim;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,6 +56,7 @@ public class MainActivity extends BridgeActivity {
             webView.setBackgroundColor(Color.parseColor("#F6F1E8"));
             // The bundled local WebView content is trusted application code.
             webView.addJavascriptInterface(new StartupBridge(), "HuushStartup");
+            webView.addJavascriptInterface(new SystemBarsBridge(), "HuushSystemBars");
             webView.postInvalidateOnAnimation();
         }
 
@@ -64,6 +69,7 @@ public class MainActivity extends BridgeActivity {
         );
 
         bridgeInsetsToWebView();
+        installStatusBarScrim();
     }
 
     private final class StartupBridge {
@@ -94,6 +100,62 @@ public class MainActivity extends BridgeActivity {
             reportFullyDrawn();
         }
         if (webView != null) webView.postInvalidateOnAnimation();
+    }
+
+    private final class SystemBarsBridge {
+        @JavascriptInterface
+        public void setStatusBarScrimColor(String color) {
+            final int parsedColor;
+            try {
+                parsedColor = Color.parseColor(color);
+            } catch (IllegalArgumentException ignored) {
+                return;
+            }
+            runOnUiThread(() -> {
+                if (statusBarScrim != null) statusBarScrim.setBackgroundColor(parsedColor);
+            });
+        }
+    }
+
+    private void installStatusBarScrim() {
+        if (getBridge() == null || getBridge().getWebView() == null) return;
+        View webView = getBridge().getWebView();
+        if (!(webView.getParent() instanceof ViewGroup)) return;
+        ViewGroup container = (ViewGroup) webView.getParent();
+
+        statusBarScrim = new View(this);
+        statusBarScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        statusBarScrim.setClickable(false);
+        statusBarScrim.setFocusable(false);
+        statusBarScrim.setBackgroundColor(Color.parseColor("#F6F1E8"));
+
+        if (container instanceof CoordinatorLayout) {
+            CoordinatorLayout.LayoutParams layoutParams = new CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0
+            );
+            layoutParams.gravity = Gravity.TOP;
+            container.addView(statusBarScrim, layoutParams);
+        } else {
+            container.addView(statusBarScrim, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0
+            ));
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(statusBarScrim, (view, insets) -> {
+            androidx.core.graphics.Insets systemInsets = insets.getInsets(
+                WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+            int nextHeight = Math.max(0, systemInsets.top);
+            if (layoutParams.height != nextHeight) {
+                layoutParams.height = nextHeight;
+                view.setLayoutParams(layoutParams);
+            }
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(statusBarScrim);
     }
 
     private void bridgeInsetsToWebView() {
