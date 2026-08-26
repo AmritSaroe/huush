@@ -1,7 +1,6 @@
 package com.amritsaroe.huush;
 
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
@@ -14,6 +13,8 @@ import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -74,8 +75,8 @@ public class MainActivity extends BridgeActivity {
             readinessRequested = true;
             runOnUiThread(() -> {
                 WebView webView = getBridge() == null ? null : getBridge().getWebView();
-                if (webView != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    webView.postVisualStateCallback(0L, new WebView.VisualStateCallback() {
+                if (webView != null && WebViewFeature.isFeatureSupported(WebViewFeature.VISUAL_STATE_CALLBACK)) {
+                    WebViewCompat.postVisualStateCallback(webView, 0L, new WebViewCompat.VisualStateCallback() {
                         @Override
                         public void onComplete(long requestId) {
                             completeStartup(webView);

@@ -1,6 +1,6 @@
 # Huush Android Capacitor Modernization Plan
 
-**Status:** Planning only; no platform migration has been applied.
+**Status:** Capacitor 8 Android baseline applied on the test branch; device validation and final hardening remain.
 **Created on branch:** `android-capacitor-8-migration-test`
 **Base commit:** `a43508c` — `Preserve settings scroll across option changes`
 **Product priority:** Finish the article-reading experience before merging platform changes.
@@ -15,7 +15,7 @@ This is a **modernization of the native foundation, not a rewrite of Huush’s r
 
 The branch audit shows that the Android and web products currently share the same frontend paths. The Android branch contains the mobile interface plus Android resources and native code, while `webapp-huush` changes the same `client/src/main.js` and `client/src/styles.css` paths to provide the desktop presentation and Cloudflare functions. This means the products are **logically separate branches but not physically separated codebases**.
 
-The proposed model keeps only two long-lived product branches while preventing accidental cross-contamination:
+The proposed model keeps only two long-lived product branches while preventing accidental cross-contamination. The migration test branch now contains the Capacitor 8 package/toolchain baseline and remains isolated from both product branches:
 
 | Area | Android test/stable branch | Webapp branch |
 |---|---|---|
@@ -116,9 +116,13 @@ The migration branch is ready to merge only when all of the following are true:
 | Distribution | Signed artifact, checksum, changelog, installation instructions, and Android Developer Console registration plan are ready |
 | Rollback | Stable Android branch remains installable and the migration can be reverted without changing the app ID or signing identity |
 
+## Current migration-test status
+
+The Capacitor 8 package upgrade, Android SDK 36 baseline, Gradle/AGP migration, AndroidX WebKit visual-state compatibility, Android 27 versioned themes, and manifest density configuration are now applied on this branch. Web build, Capacitor sync, JavaScript/type checks, Android Lint, and a debug APK build passed. No physical Android device or emulator was attached to this session, so startup, keyboard, status-bar, back-navigation, article import, sharing, and scroll behavior still require device verification.
+
 ## Final recommendation
 
-The branch split is helpful, but it should be understood correctly: it will let us test the Android mobile interface in a desktop browser much more faithfully, while the actual reusable article logic remains shared by discipline rather than accidental file copying. The immediate action is complete: the isolated migration branch now exists. The next action should be a deliberate Capacitor 8 migration in that branch after article-reader work reaches its next stable checkpoint.
+The branch split is helpful, but it should be understood correctly: it will let us test the Android mobile interface in a desktop browser much more faithfully, while the actual reusable article logic remains shared by discipline rather than accidental file copying. The isolated migration branch and Capacitor 8 baseline are now in place. The next action is physical-device validation and focused hardening before considering any merge into the stable Android branch.
 
 ### References
 
