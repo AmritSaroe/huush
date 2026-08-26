@@ -7,8 +7,8 @@ android {
         applicationId "com.amritsaroe.huush"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 31
-        versionName "2.5.8-system-bars-test"
+        versionCode 32
+        versionName "2.5.9-reader-geometry-diagnostic"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

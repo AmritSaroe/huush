@@ -120,6 +120,8 @@ let fontSizeUpdateFrame = 0;
 let lastPersistedFontSize = DEFAULT_SETTINGS.fontSize;
 let sliderInteractionDirty = false;
 let lastReaderScrollMilestone = 0;
+let readerGeometryFrame = 0;
+let readerGeometryReason = "";
 let readerOpenedAt = 0;
 let versionTapCount = 0;
 let lastVersionTapAt = 0;
@@ -464,6 +466,58 @@ function setReaderToolbarHidden(next) {
   syncReaderToolbar();
 }
 
+function elementHitDescription(element) {
+  if (!element) return "none";
+  const tag = String(element.tagName || "").toLowerCase();
+  const className = typeof element.className === "string" ? element.className.trim().replace(/\s+/g, ".") : "";
+  return `${tag}${className ? `.${className}` : ""}`.slice(0, 180);
+}
+
+function readerGeometrySnapshot(reason = "unknown") {
+  if (!Capacitor.isNativePlatform()) return;
+  readerGeometryReason = reason;
+  if (readerGeometryFrame) return;
+  const schedule = typeof window.requestAnimationFrame === "function" ? window.requestAnimationFrame.bind(window) : (callback) => window.setTimeout(callback, 0);
+  readerGeometryFrame = schedule(() => {
+    readerGeometryFrame = 0;
+    const root = document.documentElement;
+    const toolbar = document.querySelector(".reader-toolbar");
+    const surface = document.querySelector(".reader-scroll-surface");
+    const article = document.querySelector(".article-reading");
+    const opening = document.querySelector(".article-reading__opening");
+    const viewport = window.visualViewport;
+    const rootStyle = getComputedStyle(root);
+    const toolbarStyle = toolbar ? getComputedStyle(toolbar) : null;
+    const surfaceStyle = surface ? getComputedStyle(surface) : null;
+    const rect = (element) => {
+      if (!element) return null;
+      const bounds = element.getBoundingClientRect();
+      return { top: Math.round(bounds.top * 100) / 100, right: Math.round(bounds.right * 100) / 100, bottom: Math.round(bounds.bottom * 100) / 100, left: Math.round(bounds.left * 100) / 100, width: Math.round(bounds.width * 100) / 100, height: Math.round(bounds.height * 100) / 100 };
+    };
+    const hitsAt = (y) => {
+      if (y < 0 || y > window.innerHeight) return [];
+      return (document.elementsFromPoint(Math.max(1, Math.round(window.innerWidth / 2)), y) || []).slice(0, 6).map(elementHitDescription);
+    };
+    log("reader.geometry", {
+      reason: readerGeometryReason,
+      readerToolbarHidden: state.readerToolbarHidden,
+      readerScrollTop: surface?.scrollTop ?? state.articleScrollTop,
+      readerClientHeight: surface?.clientHeight ?? null,
+      readerScrollHeight: surface?.scrollHeight ?? null,
+      toolbar: rect(toolbar),
+      surface: rect(surface),
+      article: rect(article),
+      opening: rect(opening),
+      toolbarComputed: toolbarStyle ? { display: toolbarStyle.display, position: toolbarStyle.position, zIndex: toolbarStyle.zIndex, visibility: toolbarStyle.visibility, opacity: toolbarStyle.opacity, transform: toolbarStyle.transform, backgroundColor: toolbarStyle.backgroundColor, paddingTop: toolbarStyle.paddingTop, height: toolbarStyle.height, minHeight: toolbarStyle.minHeight, flexBasis: toolbarStyle.flexBasis, gridRow: toolbarStyle.gridRow } : null,
+      surfaceComputed: surfaceStyle ? { display: surfaceStyle.display, position: surfaceStyle.position, zIndex: surfaceStyle.zIndex, overflowY: surfaceStyle.overflowY, paddingTop: surfaceStyle.paddingTop, transform: surfaceStyle.transform, height: surfaceStyle.height, minHeight: surfaceStyle.minHeight, gridRow: surfaceStyle.gridRow } : null,
+      window: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, clientWidth: root.clientWidth, clientHeight: root.clientHeight },
+      visualViewport: viewport ? { width: viewport.width, height: viewport.height, offsetTop: viewport.offsetTop, pageTop: viewport.pageTop, scale: viewport.scale } : null,
+      cssInsets: { safeTop: rootStyle.getPropertyValue("--safe-area-inset-top").trim(), safeBottom: rootStyle.getPropertyValue("--safe-area-inset-bottom").trim(), wmSafeTop: rootStyle.getPropertyValue("--wm-safe-top").trim(), wmSafeBottom: rootStyle.getPropertyValue("--wm-safe-bottom").trim(), nativeSafeTop: rootStyle.getPropertyValue("--wm-native-safe-top").trim(), nativeKeyboardInset: rootStyle.getPropertyValue("--wm-native-keyboard-inset").trim() },
+      hitTests: { y0: hitsAt(1), y24: hitsAt(24), y48: hitsAt(48), y64: hitsAt(64), y80: hitsAt(80) },
+    }, "debug");
+  });
+}
+
 function handleReaderScroll(surface) {
   const scrollTop = Math.max(0, surface.scrollTop);
   const delta = scrollTop - readerLastScrollTop;
@@ -486,6 +540,7 @@ function handleReaderScroll(surface) {
   else if (delta > 5) setReaderToolbarHidden(true);
   else if (delta < -5) setReaderToolbarHidden(false);
   readerLastScrollTop = scrollTop;
+  readerGeometrySnapshot("scroll");
 }
 
 function setFocusMode(next) {
@@ -856,6 +911,7 @@ function render() {
         surface.scrollTop = state.articleScrollTop;
         readerLastScrollTop = state.articleScrollTop;
         syncReaderToolbar();
+        readerGeometrySnapshot("render");
       }
     });
   };
