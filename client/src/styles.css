@@ -1415,6 +1415,17 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
 }
 :root[data-canonical-ui="mobile"] .reader-toolbar__identity .brand__name{font-size:19px}
 :root[data-canonical-ui="mobile"] .reader-toolbar__actions{gap:0}
+/* Keep the immersive reader from retaining a hidden 64px toolbar shell. */
+:root[data-canonical-ui="mobile"] .reader-toolbar.is-hidden{
+  flex-basis:0;
+  min-height:0;
+  height:0;
+  padding-top:0;
+  padding-bottom:0;
+  transform:translateY(-100%);
+  visibility:hidden;
+  border-bottom:0;
+}
 :root[data-canonical-ui="mobile"] .reader-toolbar__actions .reader-tool,
 :root[data-canonical-ui="mobile"] .reader-tool{width:40px;height:40px}
 :root[data-canonical-ui="mobile"] .article-reading{width:100%;max-width:none;margin:0}

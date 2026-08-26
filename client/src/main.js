@@ -1133,7 +1133,8 @@ function navigateBack() {
   }
   if (state.article) {
     invalidateSmryRequest();
-    setViewTransition("back");
+    // Reader navigation uses a direct replacement so a previous article cannot bleed through the new header.
+    state.viewTransition = "";
     state.article = null;
     state.articleScrollTop = 0;
     state.articleProgress = 0;
@@ -1239,7 +1240,8 @@ async function handleAction(target) {
   if (action === "save-article-collections") { const article = state.articles.find((item) => item.id === state.collectionSheet?.articleId); if (article) { const ids = [...document.querySelectorAll("[data-collection-check]:checked")].map((input) => input.value); await setArticleCollections(article.id, ids); state.articles = await listArticles(); if (state.article?.id === article.id) state.article = state.articles.find((item) => item.id === article.id) || state.article; } state.collectionSheet = null; render(); return; }
   if (action === "open-article") {
     invalidateSmryRequest();
-    setViewTransition("forward");
+    // Do not snapshot the full root for reader navigation: old/new long-form surfaces can overlap during the transition.
+    state.viewTransition = "";
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
     state.collectionSheet = null;
     state.readerMenuOpen = false;
