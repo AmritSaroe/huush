@@ -11,6 +11,7 @@ import { pibAdapter } from "../publishers/pib.js";
 import { epwAdapter } from "../publishers/epw.js";
 import { noemaAdapter } from "../publishers/noema.js";
 import { ideasForIndiaAdapter } from "../publishers/ideas-for-india.js";
+import { moneylifeAdapter } from "../publishers/moneylife.js";
 
 // Order matters when publisher domains overlap. Economic Times is kept first
 // because it owns the dedicated JSON/storyJSON and Prime-gate implementation.
@@ -27,6 +28,7 @@ const ADAPTERS = [
   epwAdapter,
   noemaAdapter,
   ideasForIndiaAdapter,
+  moneylifeAdapter,
 ];
 
 export function getPublisherAdapter(url) {
