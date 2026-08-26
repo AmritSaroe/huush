@@ -44,6 +44,24 @@ function bodyFromRecord(record) {
     .find((value) => typeof value === "string" && cleanText(value).length >= 200) || "";
 }
 
+function isPremiumRecord(record) {
+  return record?.isAccessibleForFree === false
+    || String(record?.isAccessibleForFree || "").toLowerCase() === "false"
+    || record?.isPremium === true
+    || String(record?.isPremium || "").toLowerCase() === "true";
+}
+
+function publicPreviewFromRecord(record) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return "";
+  const description = typeof record.description === "string" ? cleanText(record.description) : "";
+  const articleBody = typeof record.articleBody === "string" ? record.articleBody : "";
+  const body = cleanText(articleBody);
+  const parts = [description, body].filter(Boolean);
+  if (!parts.length) return "";
+  const unique = parts.filter((part, index) => parts.findIndex((value) => value === part) === index);
+  return unique.map((part) => `<p>${escapeHtml(part)}</p>`).join("");
+}
+
 export function storyJsonToHtml(value) {
   const render = (node) => {
     if (node == null) return "";
@@ -162,7 +180,7 @@ function parseAssignedObject(text, token) {
 
 function documentHasAccessGate(doc) {
   const html = doc?.documentElement?.innerHTML || "";
-  return /etprimeblocker|etprime-blocker|subscription required|[\"']isAccessibleForFree[\"']\s*:\s*false/i.test(html);
+  return /etprimeblocker|etprime-blocker|articleBlocker|prime_paywall|paywall_box|subscription required|[\"']isAccessibleForFree[\"']\s*[:=]\s*(?:false|[\"']false[\"'])/i.test(html);
 }
 
 function findEmbeddedRecord(doc) {
@@ -191,8 +209,12 @@ export function extractJsonCandidate(doc, url) {
 
   const title = cleanText(record.headline || record.title || record.pageTitle || record.meta_title || record.story_page_meta_title || fixTitle(doc, ""));
   const byline = cleanText(record.author?.name || record.authorName || record.byline || fixByline(doc, ""));
-  const recordBody = bodyFromRecord(record);
-  const storyBody = storyJsonToHtml(record.storyJSON);
+  const premium = isPremiumRecord(record);
+  const recordBody = premium ? publicPreviewFromRecord(record) : bodyFromRecord(record);
+  // Never use an embedded storyJSON/full-body payload for an ETPrime record.
+  // Premium pages may ship gated content to the client, but extracting it here
+  // would bypass the publisher’s access control. Keep only public preview text.
+  const storyBody = premium ? "" : storyJsonToHtml(record.storyJSON);
   const body = [recordBody, storyBody]
     .filter(Boolean)
     .sort((left, right) => textFromHtml(right).length - textFromHtml(left).length)[0] || "";
@@ -208,9 +230,10 @@ export function extractJsonCandidate(doc, url) {
     content: `${heroImage(doc, url, title)}${stripImageByIdentity(content, getHeroImageUrl(doc, url), url)}`,
     textContent,
     excerpt: textContent.slice(0, 240),
-    gated: recordHasAccessGate(record) || documentHasAccessGate(doc),
+    gated: isPremiumRecord(record) || recordHasAccessGate(record) || documentHasAccessGate(doc),
     _record: record,
-    _strategy: "economic-times-json",
+    _publisherSpecific: true,
+    _strategy: premium ? "economic-times-prime-preview" : "economic-times-json",
   };
 }
 
@@ -220,6 +243,7 @@ export const economicTimesAdapter = {
   matches: isEconomicTimesUrl,
   isArticleIndexUrl,
   detectAccessGate: documentHasAccessGate,
+  preferPublisherCandidatesWhenGated: true,
   extractCandidates(doc, url) {
     const json = extractJsonCandidate(doc, url);
     return json ? [json] : [];

@@ -16,9 +16,9 @@ export const PAYWALL_PHRASES = [
 
 export function recordHasAccessGate(record) {
   if (!record || typeof record !== "object") return false;
-  if (record.isAccessibleForFree === false || record.isPremium === true) return true;
+  if (record.isAccessibleForFree === false || String(record.isAccessibleForFree).toLowerCase() === "false" || record.isPremium === true || String(record.isPremium).toLowerCase() === "true") return true;
   try {
-    return /etprimeblocker|etprime-blocker|subscription required|isAccessibleForFree\s*[:=]\s*false/i.test(JSON.stringify(record));
+    return /etprimeblocker|etprime-blocker|subscription required|isAccessibleForFree\s*[:=]\s*(?:false|["']false["'])/i.test(JSON.stringify(record));
   } catch {
     return false;
   }
@@ -27,7 +27,7 @@ export function recordHasAccessGate(record) {
 export function htmlHasAccessGate(html = "") {
   // Only unambiguous page-level markers are trusted here. Generic words such as
   // “subscribe” often appear in harmless navigation chrome on free articles.
-  return /etprimeblocker|etprime-blocker|subscription required|[\"']isAccessibleForFree[\"']\s*:\s*false/i.test(String(html || ""));
+  return /etprimeblocker|etprime-blocker|subscription required|[\"']isAccessibleForFree[\"']\s*[:=]\s*(?:false|[\"']false[\"'])/i.test(String(html || ""));
 }
 
 export function textHasAccessGate(text = "") {

@@ -76,7 +76,10 @@ export async function extractArticle(url, options = {}) {
     options.log?.("extract.timing", { totalMs: Math.round(now() - startedAt), fetchMs: Math.round(fetchedAt - fetchStartedAt), documentParseMs: Math.round(parsedAt - parseStartedAt), candidateMs: Math.round(now() - candidatesStartedAt), candidateCount: candidates.length, htmlBytes: html.length }, "debug");
     if (!candidates.length) throw createExtractionError("no_article", "Could not extract article content from this page.");
     const adapterGate = Boolean(adapter.detectAccessGate?.(doc));
-    const scored = candidates.map((candidate) => ({
+    const preferredCandidates = adapter.preferPublisherCandidatesWhenGated && adapterGate
+      ? candidates.filter((candidate) => candidate._publisherSpecific)
+      : candidates;
+    const scored = (preferredCandidates.length ? preferredCandidates : candidates).map((candidate) => ({
       ...candidate,
       gated: Boolean(candidate.gated) || adapterGate,
       _score: scoreCandidate(candidate),
