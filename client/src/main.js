@@ -114,6 +114,7 @@ let settingsInteractionUnlockTimeout = 0;
 let screenEnteredAt = Date.now();
 let lastPauseAt = 0;
 let searchLogTimeout = 0;
+let logViewerRenderTimeout = 0;
 let searchArticlesTimeout = 0;
 let settingsInteractionLocked = false;
 let readerLastScrollTop = 0;
@@ -459,12 +460,14 @@ function syncReaderToolbar() {
 function setReaderToolbarHidden(next) {
   const toolbar = document.querySelector(".reader-toolbar");
   if (next && toolbar?.contains(document.activeElement)) return;
+  const changed = state.readerToolbarHidden !== next;
   state.readerToolbarHidden = next;
   if (!next && state.focusMode) {
     state.focusMode = false;
     syncFocusMode();
   }
   syncReaderToolbar();
+  if (changed) readerGeometrySnapshot("toolbar-toggle");
 }
 
 function elementHitDescription(element) {
@@ -541,7 +544,6 @@ function handleReaderScroll(surface) {
   else if (delta > 5) setReaderToolbarHidden(true);
   else if (delta < -5) setReaderToolbarHidden(false);
   readerLastScrollTop = scrollTop;
-  readerGeometrySnapshot("scroll");
 }
 
 function setFocusMode(next) {
@@ -766,6 +768,23 @@ function logRowMarkup(entry, index) {
   const key = `${entry.time || "unknown"}-${entry.event || "event"}-${index}`;
   const expanded = state.expandedLogKey === key;
   return `<article class="developer-log-row ${expanded ? "is-expanded" : ""}" data-action="toggle-log-entry" data-log-key="${escapeHtml(key)}"><div class="developer-log-row__header"><time>${escapeHtml(formatClock(entry.time))}</time><span class="developer-log-row__level developer-log-row__level--${logLevelClass(entry.level)}">${escapeHtml(entry.level || "info")}</span><strong>${escapeHtml(entry.event || "unknown.event")}</strong><span class="developer-log-row__chevron">${icon("chevron", 17)}</span></div>${expanded ? `<pre class="developer-log-row__detail">${escapeHtml(formatLogDetail(entry.detail))}</pre>` : ""}</article>`;
+}
+
+function updateLogViewerList() {
+  const list = document.querySelector(".log-viewer-list");
+  const count = document.querySelector(".log-viewer-screen__count");
+  if (!list || !count || !document.querySelector("[data-log-search]")) return;
+  const filtered = filteredLogEvents();
+  count.textContent = String(filtered.length);
+  list.innerHTML = filtered.length ? filtered.map(logRowMarkup).join("") : '<p class="log-empty">No matching events.</p>';
+}
+
+function scheduleLogViewerUpdate() {
+  window.clearTimeout(logViewerRenderTimeout);
+  logViewerRenderTimeout = window.setTimeout(() => {
+    logViewerRenderTimeout = 0;
+    updateLogViewerList();
+  }, 120);
 }
 
 function developerOptionsMarkup() {
@@ -1714,8 +1733,7 @@ document.addEventListener("input", (event) => {
     state.logViewerSearch = event.target.value;
     window.clearTimeout(searchLogTimeout);
     searchLogTimeout = window.setTimeout(() => logger.log("search.query", { term: state.logViewerSearch, resultCount: filteredLogEvents().length, durationMs: 0 }), 350);
-    render();
-    requestAnimationFrame(() => { const field = document.querySelector("[data-log-search]"); field?.focus(); field?.setSelectionRange(state.logViewerSearch.length, state.logViewerSearch.length); });
+    scheduleLogViewerUpdate();
     return;
   }
   if (event.target.matches("[data-search-articles]")) {
@@ -1902,12 +1920,18 @@ async function init() {
   state.articles = await listArticles();
   document.documentElement.dataset.huushScreen = "library";
   logger.log("app.launch", { coldStart: true, version: APP_VERSION, platform: Capacitor.getPlatform(), webViewVersion: navigator.userAgent });
-  logStorageStats();
-  logMemoryWarningIfAvailable();
   await setupNativeBackHandling();
   await setupAppLifecycleLogging();
   render();
   signalNativeStartupReady();
+  const scheduleIdle = (callback) => {
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(callback, { timeout: 2000 });
+    else window.setTimeout(callback, 500);
+  };
+  scheduleIdle(() => {
+    logStorageStats();
+    logMemoryWarningIfAvailable();
+  });
   preloadReadingFonts();
 }
 
