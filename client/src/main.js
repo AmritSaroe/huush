@@ -92,6 +92,8 @@ const state = {
   logViewerSearch: "",
   expandedLogKey: "",
   confirmClear: false,
+  confirmCollectionDelete: null,
+  confirmClearLogs: false,
   saveStage: "",
   viewTransition: "",
 };
@@ -469,7 +471,12 @@ function handleReaderScroll(surface) {
   const nearArticleEnd = maxScrollTop - scrollTop <= 28;
       state.articleScrollTop = scrollTop;
     state.articleProgress = maxScrollTop ? Math.min(100, Math.round((scrollTop / maxScrollTop) * 100)) : 0;
-    document.querySelector(".reader-progress")?.style.setProperty("--progress", `${state.articleProgress}%`);
+    const progress = document.querySelector(".reader-progress");
+    if (progress) {
+      progress.style.setProperty("--progress", `${state.articleProgress}%`);
+      progress.setAttribute("aria-valuenow", String(state.articleProgress));
+      progress.setAttribute("aria-valuetext", `${state.articleProgress}% read`);
+    }
     const milestone = Math.min(4, Math.floor(state.articleProgress / 25));
     if (state.article && milestone > lastReaderScrollMilestone) {
       lastReaderScrollMilestone = milestone;
@@ -601,7 +608,7 @@ function bottomNavigationMarkup() {
 function collectionMarkup() {
   const countFor = (id) => id === "all" ? state.articles.length : state.articles.filter((article) => article.collectionIds?.includes(id)).length;
   const items = [{ id: "all", name: "All" }, ...state.collections];
-  return '<section class="collections-section" aria-label="Collections"><div class="collections-heading"><h2>Collections</h2><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New</button></div><div class="collection-bar" aria-label="Article collections">' + items.map((item) => '<button class="collection-chip ' + (state.activeCollectionId === item.id ? "is-active" : "") + '" data-action="set-collection" data-collection-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + (item.id === "all" || countFor(item.id) ? ' · ' + countFor(item.id) : '') + '</button>').join("") + '</div></section>';
+  return '<section class="collections-section" aria-label="Collections"><div class="collections-heading"><h2>Collections</h2><div class="collections-heading__actions"><button class="collection-tool collection-tool--manage" data-action="manage-collections">Manage</button><button class="collection-tool collection-tool--new" data-action="open-new-collection">+ New</button></div></div><div class="collection-bar" aria-label="Article collections">' + items.map((item) => '<button class="collection-chip ' + (state.activeCollectionId === item.id ? "is-active" : "") + '" data-action="set-collection" data-collection-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + (item.id === "all" || countFor(item.id) ? ' · ' + countFor(item.id) : '') + '</button>').join("") + '</div></section>';
 }
 function collectionManagementMarkup() {
   const custom = state.collections;
@@ -711,6 +718,16 @@ function clearDataConfirmMarkup() {
   return `<div class="confirm-backdrop" data-action="cancel-clear-data" aria-hidden="true"></div><section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-data-title"><div class="confirm-dialog__icon">${icon("trash", 22)}</div><h2 id="clear-data-title">Clear local library?</h2><p>This will remove all saved articles from this device. They will remain in your cloud account if sync is enabled.</p><div class="confirm-dialog__actions"><button data-action="cancel-clear-data">Cancel</button><button class="is-destructive" data-action="confirm-clear-data">Clear library</button></div></section>`;
 }
 
+function collectionDeleteConfirmMarkup() {
+  const item = state.collections.find((entry) => entry.id === state.confirmCollectionDelete);
+  if (!item) return "";
+  return `<div class="confirm-backdrop" data-action="cancel-delete-collection" aria-hidden="true"></div><section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-collection-title"><div class="confirm-dialog__icon">${icon("trash", 22)}</div><h2 id="delete-collection-title">Delete collection?</h2><p>“${escapeHtml(item.name)}” will be removed. Saved articles will stay on this device.</p><div class="confirm-dialog__actions"><button data-action="cancel-delete-collection">Cancel</button><button class="is-destructive" data-action="confirm-delete-collection">Delete collection</button></div></section>`;
+}
+
+function clearLogsConfirmMarkup() {
+  return `<div class="confirm-backdrop" data-action="cancel-clear-logs" aria-hidden="true"></div><section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-logs-title"><div class="confirm-dialog__icon">${icon("trash", 22)}</div><h2 id="clear-logs-title">Clear diagnostic logs?</h2><p>This removes event history only. Saved articles and reading settings stay on this device.</p><div class="confirm-dialog__actions"><button data-action="cancel-clear-logs">Cancel</button><button class="is-destructive" data-action="confirm-clear-logs">Clear logs</button></div></section>`;
+}
+
 function sizeControlMarkup() {
   return `<div class="setting-label-row"><p class="setting-label">Text size</p></div><div class="font-size-control"><button class="type-scale-button" data-action="change-size" data-delta="-1" data-size-decrement aria-label="Decrease text size">−</button><div class="font-size-slider"><span aria-hidden="true">A</span><input data-font-size-range type="range" min="14" max="24" step="1" value="${state.settings.fontSize}" aria-label="Text size" aria-valuetext="${state.settings.fontSize} pixels" /><span class="font-size-slider__large" aria-hidden="true">A</span></div><button class="type-scale-button" data-action="change-size" data-delta="1" data-size-increment aria-label="Increase text size">+</button></div><div class="font-size-ticks" aria-hidden="true">${[14,16,18,20,22,24].map((size) => `<span class="${size === state.settings.fontSize ? "is-current" : ""}">${size}</span>`).join("")}</div>`;
 }
@@ -818,7 +835,7 @@ function render() {
   const useNativeViewTransition = Boolean(transition && document.startViewTransition && !reducedMotionPreferred());
   const update = () => {
     const shellClass = transition && !useNativeViewTransition ? ` app-shell--view-${transition}` : "";
-    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${state.article ? readerMenuMarkup() : ""}${toastMarkup()}</div>`;
+    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${state.confirmCollectionDelete ? collectionDeleteConfirmMarkup() : ""}${state.confirmClearLogs ? clearLogsConfirmMarkup() : ""}${state.article ? readerMenuMarkup() : ""}${toastMarkup()}</div>`;
     applySettings();
     if (transition) {
       const nextShell = root.querySelector(".app-shell");
@@ -1004,6 +1021,8 @@ async function exportLogs() {
 }
 
 function toggleDeveloperOptions() {
+  const settingsScreen = document.querySelector(".settings-screen");
+  const previousScrollTop = settingsScreen?.scrollTop ?? state.settingsScrollTop;
   state.developerOptionsEnabled = !state.developerOptionsEnabled;
   try { window.localStorage.setItem(STORAGE_FLAGS.developer, String(state.developerOptionsEnabled)); } catch { /* no-op */ }
   if (!state.developerOptionsEnabled) {
@@ -1020,6 +1039,11 @@ function toggleDeveloperOptions() {
     section.removeAttribute("aria-hidden");
   } else {
     document.querySelector(".settings-about")?.insertAdjacentHTML("afterend", developerOptionsMarkup());
+  }
+  if (settingsScreen) {
+    const maxScrollTop = Math.max(0, settingsScreen.scrollHeight - settingsScreen.clientHeight);
+    settingsScreen.scrollTop = Math.min(previousScrollTop, maxScrollTop);
+    state.settingsScrollTop = settingsScreen.scrollTop;
   }
   showToastInPlace("Developer options enabled.", "success");
 }
@@ -1045,6 +1069,40 @@ async function copyText(text) {
   textarea.remove();
 }
 
+async function shareCurrentArticle() {
+  const article = state.article;
+  if (!article) return;
+  const shareData = {
+    title: article.title,
+    text: `${article.title} — ${article.source || "Huush"}`,
+    url: article.url,
+  };
+  try {
+    if (Capacitor.isNativePlatform()) {
+      await Share.share({ ...shareData, dialogTitle: "Share article" });
+      showToastInPlace("Share sheet ready.", "success");
+      return;
+    }
+    if (typeof navigator.share === "function") {
+      await navigator.share(shareData);
+      showToastInPlace("Share sheet ready.", "success");
+      return;
+    }
+    await copyText(article.url);
+    showToastInPlace("Source link copied. Sharing is unavailable here.", "success");
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    try {
+      await copyText(article.url);
+      showToastInPlace("Source link copied instead.", "success");
+    } catch (copyError) {
+      logCapacitorError("Share", "share", error);
+      logCapacitorError("Clipboard", "copy", copyError);
+      showToastInPlace("Couldn’t open sharing or copy the link.", "error");
+    }
+  }
+}
+
 function navigateBack() {
   if (state.logViewerOpen) {
     state.logViewerOpen = false;
@@ -1057,6 +1115,9 @@ function navigateBack() {
   }
   if (state.readerThemeOpen) { closeVisibleSheet(() => { state.readerThemeOpen = false; render(); }); return true; }
   if (state.readerMenuOpen) { closeVisibleSheet(() => { state.readerMenuOpen = false; render(); }); return true; }
+  if (state.confirmCollectionDelete) { state.confirmCollectionDelete = null; render(); return true; }
+  if (state.confirmClearLogs) { state.confirmClearLogs = false; render(); return true; }
+  if (state.confirmClear) { state.confirmClear = false; render(); return true; }
   if (state.collectionSheet) { closeVisibleSheet(() => { state.collectionSheet = null; render(); }); return true; }
   if (state.captureOpen) {
     closeVisibleSheet(() => { state.captureOpen = false; render(); });
@@ -1168,7 +1229,9 @@ async function handleAction(target) {
   if (action === "open-tag") { state.activeCollectionId = target.dataset.collectionId || "all"; state.activeTab = "library"; render(); return; }
   if (action === "manage-collections") { state.collectionSheet = { type: "manage" }; render(); return; }
   if (action === "rename-collection") { const item = state.collections.find((entry) => entry.id === target.dataset.id); const input = target.closest(".collection-management-row")?.querySelector("[data-rename-collection]"); const name = input?.value.trim().slice(0, 60); if (!item || !name) return; if (state.collections.some((entry) => entry.id !== item.id && entry.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } item.name = name; await storage.set(KEYS.collections, state.collections); render(); return; }
-  if (action === "delete-collection") { const id = target.dataset.id; const item = state.collections.find((entry) => entry.id === id); if (!item) return; if (!window.confirm(`Delete the “${item.name}” collection? Articles will be kept.`)) return; const articles = await listArticles(); await Promise.all(articles.filter((article) => article.collectionIds?.includes(id)).map((article) => setArticleCollections(article.id, article.collectionIds.filter((entry) => entry !== id)))); state.collections = state.collections.filter((entry) => entry.id !== id); if (state.activeCollectionId === id) state.activeCollectionId = "all"; state.articles = await listArticles(); if (state.article) state.article = state.articles.find((article) => article.id === state.article.id) || state.article; await storage.set(KEYS.collections, state.collections); state.collectionSheet = null; render(); return; }
+  if (action === "delete-collection") { const id = target.dataset.id; if (!state.collections.some((entry) => entry.id === id)) return; state.confirmCollectionDelete = id; render(); return; }
+  if (action === "cancel-delete-collection") { state.confirmCollectionDelete = null; render(); return; }
+  if (action === "confirm-delete-collection") { const id = state.confirmCollectionDelete; state.confirmCollectionDelete = null; const item = state.collections.find((entry) => entry.id === id); if (!item) { render(); return; } const articles = await listArticles(); await Promise.all(articles.filter((article) => article.collectionIds?.includes(id)).map((article) => setArticleCollections(article.id, article.collectionIds.filter((entry) => entry !== id)))); state.collections = state.collections.filter((entry) => entry.id !== id); if (state.activeCollectionId === id) state.activeCollectionId = "all"; state.articles = await listArticles(); if (state.article) state.article = state.articles.find((article) => article.id === state.article.id) || state.article; await storage.set(KEYS.collections, state.collections); logger.log("collection.delete", { id, name: item.name }); state.collectionSheet = null; render(); return; }
   if (action === "open-new-collection") { state.collectionSheet = { type: "new" }; render(); requestAnimationFrame(() => document.querySelector("[data-collection-name]")?.focus()); return; }
   if (action === "close-collection-sheet") { closeVisibleSheet(() => { state.collectionSheet = null; render(); }); return; }
   if (action === "create-collection") { const input = document.querySelector("[data-collection-name]"); const name = input?.value.trim().slice(0, 60); if (!name) return; if (state.collections.some((item) => item.name.toLowerCase() === name.toLowerCase())) { showToast("That collection already exists.", "error"); return; } state.collections = [...state.collections, { id: `collection-${Date.now()}`, name }]; await storage.set(KEYS.collections, state.collections); logger.log("collection.create", { name, color: null }); state.collectionSheet = null; render(); return; }
@@ -1246,8 +1309,7 @@ async function handleAction(target) {
   if (action === "share-article" && state.article) {
     state.readerMenuOpen = false;
     render();
-    try { await Share.share({ title: state.article.title, text: `${state.article.title} — ${state.article.source || "Huush"}`, url: state.article.url, dialogTitle: "Share article" }); showToastInPlace("Share sheet ready.", "success"); }
-    catch (error) { logCapacitorError("Share", "share", error); showToastInPlace("Couldn’t open sharing.", "error"); }
+    await shareCurrentArticle();
     return;
   }
   if (action === "bookmark-article" && state.article) { showToastInPlace("Already saved in your library.", "neutral"); return; }
@@ -1325,13 +1387,9 @@ async function handleAction(target) {
     catch (error) { logCapacitorError("Share", "share", error); showToast("Couldn’t export diagnostics.", "error"); }
     return;
   }
-  if (action === "clear-developer-logs") {
-    if (!window.confirm("Delete all diagnostic logs? This cannot be undone.")) return;
-    logger.clear();
-    state.logViewerEvents = [];
-    showToastInPlace("Diagnostic logs cleared.", "success");
-    return;
-  }
+  if (action === "clear-developer-logs") { state.confirmClearLogs = true; render(); return; }
+  if (action === "cancel-clear-logs") { state.confirmClearLogs = false; render(); return; }
+  if (action === "confirm-clear-logs") { state.confirmClearLogs = false; logger.clear(); state.logViewerEvents = []; showToast("Diagnostic logs cleared.", "success"); return; }
   if (action === "simulate-error") {
     const testError = new Error("Huush simulated developer error");
     logger.log("error.test", { message: testError.message, stack: testError.stack }, "error");

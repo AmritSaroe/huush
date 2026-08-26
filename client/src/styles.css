@@ -1090,7 +1090,7 @@ button,input { -webkit-tap-highlight-color:transparent; }
 .home-capture { margin-bottom:28px; }
 .home-capture-form { gap:10px; }
 .home-url-field { display:flex; min-width:0; flex:1; align-items:center; gap:10px; min-height:58px; padding:0 17px; border:1px solid var(--brand-line); border-radius:6px; background:var(--paper); color:var(--brand-muted); }
-.home-url-field input { min-width:0; width:100%; border:0; outline:0; background:transparent; color:var(--ink); font-size:16px; }
+.home-url-field input { min-width:0; width:100%; min-height:48px; border:0; outline:0; background:transparent; color:var(--ink); font-size:16px; }
 .home-capture-submit { min-width:58px; min-height:58px; border:0; border-radius:50%; background:var(--brand-ink); color:var(--brand-paper); box-shadow:none; }
 .capture-stage { margin:9px 0 0 2px; color:var(--brand-muted); font-size:13px; }
 
@@ -1099,9 +1099,9 @@ button,input { -webkit-tap-highlight-color:transparent; }
 .collections-heading h2,.section-heading h2,.tags-heading h2,.settings-section-heading h2 { color:var(--brand-ink); font-family:var(--font-brand); font-weight:400; letter-spacing:-.045em; }
 .collections-heading h2 { font-size:25px; }
 .collection-bar { padding-right:0; padding-left:0; }
-.collection-chip { min-height:44px; border-color:var(--brand-line); border-radius:999px; background:transparent; color:var(--brand-muted); }
+.collection-chip { min-height:48px; border-color:var(--brand-line); border-radius:999px; background:transparent; color:var(--brand-muted); }
 .collection-chip.is-active { background:var(--brand-ink); color:var(--brand-paper); border-color:var(--brand-ink); }
-.collection-tool--new { border-color:var(--brand-line); color:var(--brand-ink); }
+.collection-tool--new { min-width:48px; min-height:48px; border-color:var(--brand-line); color:var(--brand-ink); }
 .library-search { min-height:48px; margin:3px 0 23px; border-color:var(--brand-line); background:transparent; }
 .library-search input { color:var(--ink); }
 
@@ -1309,6 +1309,17 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
 .bottom-navigation__item{min-width:48px;min-height:48px}
 @media (min-width:900px){.bottom-navigation{width:232px;margin:0}.bottom-navigation__item{min-height:48px}}
 
+
+.collections-heading__actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.collection-tool--manage{min-width:48px;min-height:48px;padding:0 8px;color:var(--muted);white-space:nowrap}
+
+/* Official mobile tap-target baseline: keep every primary control at least 48px. */
+.theme-toggle,.mark-button,.settings-screen .profile-tile{width:48px;height:48px;min-width:48px;min-height:48px}
+.library-search__clear{width:48px;height:48px;flex-basis:48px;min-width:48px;min-height:48px}
+.collection-chip,.collection-tool--new,.empty-library__action{min-height:48px}
+.home-url-field input,.capture__form--sheet input{min-height:48px}
+.reader-toolbar{grid-template-columns:48px minmax(0,1fr) auto}
+.reader-tool{width:48px;height:48px;min-width:48px;min-height:48px}
 
 /* Clear-library confirmation must cover persistent navigation, not sit beneath it. */
 .confirm-backdrop{z-index:60}

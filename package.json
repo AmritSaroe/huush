@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.5.2-mobile-ui-test",
+  "version": "2.5.3-regression-test",
   "type": "module",
   "license": "MIT",
   "scripts": {

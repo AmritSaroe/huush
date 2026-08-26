@@ -33,6 +33,7 @@ function clean(value = "") {
 export function sourceName(url) {
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    if (hostname === "localhost" || hostname === "::1" || /^\[?[0-9a-f:]+\]?$/i.test(hostname) || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname)) return "Local source";
     const mapped = Object.keys(SOURCE_MAP).find((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
     if (mapped) return SOURCE_MAP[mapped];
     const parts = hostname.split(".").filter(Boolean);

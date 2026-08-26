@@ -129,3 +129,74 @@ The canonical mobile Event log view supports live text filtering and Error/Warn/
 ## 2026-08-26 Final first-paint mobile-canonical check
 
 A cold interactive browser start at the wide viewport now shows the Android Library interface immediately: the 720px mobile surface is centered with neutral side bars, the capture action is a circular plus button, article cards remain compact and single-column, and navigation remains Library/Tags/Settings at the bottom. The static HTML marker prevents the old desktop presentation from appearing before JavaScript initialization.
+
+## 2026-08-26 Full feature pass: Library search
+
+Cold Library start stayed on the canonical Android shell at the wide viewport. The top search control expands an inline saved-article search field, focuses correctly, and filters the fixture. A guaranteed non-match shows a dedicated message and Clear search action rather than stale cards. The circular plus remains the only article-capture action; bottom navigation remains Library, Tags, and Settings.
+
+## 2026-08-26 Full feature pass: capture validation and recovery
+
+Empty capture submission shows `Paste a complete article URL first.` without layout movement. A malformed URL is rejected by the browser URL control with `Please enter a URL.` and does not start a fetch. A valid safe HTTPS request entered the `Fetching article…` state, then returned to an idle Library state without a stuck spinner; the current fixture remained intact.
+
+## 2026-08-26 Full feature pass: extraction and reader fixture
+
+The controlled same-origin article now saves through the real capture flow. The expanded fixture is not preview-only, uses the full `og:title`/heading title, retains 15 body paragraphs, and retains exactly one Open Graph image after duplicate-image removal. Publisher `style`, `class`, `id`, `data-*`, and script attributes were removed; the remaining `data-loaded` marker belongs to Huush’s image loader and is not publisher content. A reproducible issue remains for loopback/IP URLs: `sourceName()` renders the source as `0` because it treats the final IPv4 component as the brand.
+
+
+## 2026-08-26 Full feature pass: reader end and progress
+
+The expanded full article reaches the footer at the end of the reader without clipping; Organize and Open source remain reachable. Before the patch, the reader progressbar visually tracked scroll but its `aria-valuenow` stayed at `0` at the end. The handler now synchronizes `aria-valuenow` and `aria-valuetext` whenever scroll progress changes; a post-patch end-position verification is still required.
+
+
+## 2026-08-26 Full feature pass: progress and Focus mode
+
+After the patch, scrolling the full fixture to the end reports `aria-valuenow="100"`, `aria-valuetext="100% read"`, visual progress `100%`, and an end-reachable footer. A clean runtime reload then confirmed the Reader menu’s Focus mode hides the entire reader chrome and leaves only the article actions visible; the earlier failed toggle was caused by the hot-reload test context, not the clean app runtime.
+
+
+## 2026-08-26 Full feature pass: Focus-mode exit checks
+
+The clean runtime enters Focus mode correctly and removes the Reader toolbar. A browser coordinate tap on the rendered article and Escape did not exit Focus mode in this run; the state remained `focus=true`, `toolbarHidden=true`, and `scrollTop=0`. This may reflect the browser harness not delivering the intended content click, but it must be verified against the delegated click handler and Android back callback before release.
+
+
+## 2026-08-26 Full feature pass: reader tools
+
+A real paragraph click exits Focus mode and restores controls without a reload. Copy source link closes the menu, shows `Source link copied.`, and returns to the reader. The full fixture reader currently shows one hero image and the Article separator; its source is now displayed as `Local source` for the loopback test URL.
+
+
+## 2026-08-26 Full feature pass: reading preferences and copy
+
+Nested Reading settings remain bottom-anchored and preserve the reader. Merriweather selection updates in place; rapid slider values `24 → 20 → 18` end at `18px` and the visible ARIA label reads `18 pixels, default`. Copy source link shows a success toast and closes the menu. Dark and Sepia reader surfaces remain readable and the previously reported Sepia headline bar was not reproduced.
+
+
+## 2026-08-26 Full feature pass: sharing
+
+The Reader menu and toolbar share actions reach the handler, but browser mode currently shows `Couldn’t open sharing.` because it calls the native Capacitor Share plugin without a web fallback. This is a real cross-platform inconsistency for the Android branch’s browser-mobile test surface. The fix will use `navigator.share()` where available, treat user cancellation as non-error, and fall back to copying the source URL.
+
+
+## 2026-08-26 Full feature pass: browser share and new collection
+
+Browser Share article now falls back to copying the source URL and shows `Source link copied. Sharing is unavailable here.` instead of a false native-share error. New collection opens as an in-shell bottom sheet; a blank submission leaves the sheet open and creates no empty collection.
+
+## 2026-08-26 Full feature pass: tap targets
+A final cascade-safe canonical-mobile layer raised the Library search/theme control, collection chips/new controls, empty-state CTA, capture inputs, reader toolbar/tools, Settings back control, and persistent bottom navigation to at least 48 CSS px. The live wide-viewport audit found no visible primary button/radio control below 48px; the only sub-48 measurement is the native range track (16px) inside a 48px `.font-size-slider` wrapper. Capture sheet closure remained clean. Physical Android status/gesture inset, IME, rotation, TalkBack, splash, and native Share verification remain device-only.
+
+## Open exhaustive checks
+Developer version seven-tap unlock, reduced-motion, keyboard visualViewport behavior, accessibility focus order, and final console diagnostics still require completion before build and delivery.
+
+## 2026-08-26 Full feature pass: deletion and clear flows
+A touch-like drag through the actual delegated pointer handlers removed the first saved card. A second swipe removed the remaining card; the underlying pending-delete state was restored through the existing Undo action and the article returned to Library. Clear-library Cancel preserved the article count and lower Settings scroll; Confirm cleared all saved articles and collections, updated storage to zero, and returned the empty-state counts without a reload. The disposable article was recaptured afterward for reader tests.
+
+## 2026-08-26 Full feature pass: reader surface and actions
+The Reader surface chooser rendered as an in-shell bottom sheet with Light, Sepia, and Dark radio options; switching to Light closed the sheet in place and preserved the reader. Bookmark returned `Already saved in your library.` without changing state. Browser Share returned `Source link copied. Sharing is unavailable here.` and did not log a native plugin failure. The reader remained at the same position throughout.
+
+## 2026-08-26 Full feature pass: confirmation dialogs
+The native browser-confirm dependency was removed from collection deletion and developer Clear logs. Both now use the in-app accessible confirmation dialog. Collection deletion confirmation removed the collection while retaining articles; Clear logs Cancel preserved the view, and Confirm removed diagnostics only, retained saved-article storage, dismissed the dialog, and displayed the success toast. An active collection delete was also verified: the article stayed saved, its membership was removed, and the Library filter reset to All.
+
+## 2026-08-26 Full feature pass: developer options and accessibility
+A fresh locked-state seven-tap test initially exposed a real scroll jump when Developer options were revealed from a scrolled Settings view. The toggle now captures and restores the Settings scroll position; a repeat from `scrollTop=520` ended at `520` (`delta=0`) while enabling Developer options. Logging toggled off/on in place; Simulate error created `error.test`; Error filtering and row expansion showed the diagnostic detail; Export logs produced a valid 11.8 KB JSON download with 39 events; Reset developer options hid the section again. The live accessibility audit found 26 visible controls with no unnamed control; only the native 16px range track is below 48px, inside a 48px `.font-size-slider` wrapper.
+
+## 2026-08-26 Full feature pass: System theme and keyboard-safe capture
+System theme selected successfully with `themePreference=system`, effective `theme=light` under the browser’s light OS preference, label `System (light)`, and matching theme-color token. The capture sheet’s focused URL field measured 61px high and remained within the visible 1100px browser viewport; the sheet used its expected bottom anchoring and no layout overflow appeared. This is browser-side verification only; Android IME resize, rotation, and safe-area behavior still require a physical device.
+
+## 2026-08-26 Full feature pass: collection management
+The visible Library collection header previously exposed only `+ New`, leaving the existing rename/delete handlers unreachable. A `Manage` action was added beside `+ New`. Rename to `Essays` persisted in place and retained the article membership; duplicate rename was rejected with `That collection already exists.` Deleting the disposable `Regression Folder` now opens an in-app confirmation sheet rather than a blocking browser `window.confirm`; confirming removed only the collection, kept both saved articles, and returned to Library. Android back now dismisses this confirmation before closing its underlying sheet.
