@@ -38,7 +38,7 @@ def cubic(p0, p1, p2, p3, t):
 
 
 def mark_geometry(canvas_size):
-    symbol_width = canvas_size * 0.48
+    symbol_width = canvas_size * 0.60
     symbol_height = symbol_width * 328 / 305
     origin_x = (canvas_size - symbol_width) / 2
     origin_y = (canvas_size - symbol_height) / 2
@@ -58,15 +58,8 @@ def mark_geometry(canvas_size):
 def draw_mark(size, transparent=False):
     supersample = 4
     canvas_size = size * supersample
-    image = Image.new("RGBA", (canvas_size, canvas_size), TRANSPARENT)
+    image = Image.new("RGBA", (canvas_size, canvas_size), TRANSPARENT if transparent else PAPER)
     draw = ImageDraw.Draw(image)
-    if not transparent:
-        draw.rectangle((0, 0, canvas_size, canvas_size), fill=(38, 37, 34, 255))
-    draw.rounded_rectangle(
-        (canvas_size * 0.18, canvas_size * 0.13, canvas_size * 0.82, canvas_size * 0.87),
-        radius=canvas_size * 0.13,
-        fill=PAPER,
-    )
     outer, lines, stroke = mark_geometry(canvas_size)
     draw.polygon(outer, fill=INK)
     for points in lines:
