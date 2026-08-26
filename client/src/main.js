@@ -983,7 +983,9 @@ async function handleExtractUrl(url) {
     saveStage = "parse";
     state.saveStage = "Saving article locally…";
     render();
+    const storageStartedAt = performance.now();
     const savedArticle = await saveArticle(article);
+    log("storage.save.timing", { durationMs: Math.round(performance.now() - storageStartedAt), articleCount: state.articles.length }, "debug");
     saveStage = "store";
     const imageCount = (article.content || "").match(/<img\b/gi)?.length || 0;
     log("article.save.success", { url, parseTimeMs: Math.round(performance.now() - startedAt), wordCount: String(article.textContent || stripHtml(article.content || "")).split(/\s+/).filter(Boolean).length, imageCount });

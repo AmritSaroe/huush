@@ -11,6 +11,10 @@ function parseDocument(html) {
   return new DOMParser().parseFromString(html, "text/html");
 }
 
+function now() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
 function asArticle(candidate, url) {
   const textContent = candidate.textContent || textFromHtml(candidate.content || "");
   const accessGated = Boolean(candidate.gated)
@@ -38,14 +42,20 @@ export async function extractArticle(url, options = {}) {
   let directArticle = null;
   let directError = null;
   const adapter = getPublisherAdapter(url);
+  const startedAt = now();
 
   try {
     if (adapter.isArticleIndexUrl?.(url)) {
       throw createExtractionError("section_page", "This Economic Times page is an article index. Choose an individual article to save.");
     }
 
+    const fetchStartedAt = now();
     const html = await fetchHtml(url, options);
+    const fetchedAt = now();
+    const parseStartedAt = fetchedAt;
     const doc = parseDocument(html);
+    const parsedAt = now();
+    const candidatesStartedAt = parsedAt;
     const candidates = [];
 
     if (adapter !== genericAdapter) {
@@ -63,6 +73,7 @@ export async function extractArticle(url, options = {}) {
       if (candidate) candidates.push(candidate);
     }
 
+    options.log?.("extract.timing", { totalMs: Math.round(now() - startedAt), fetchMs: Math.round(fetchedAt - fetchStartedAt), documentParseMs: Math.round(parsedAt - parseStartedAt), candidateMs: Math.round(now() - candidatesStartedAt), candidateCount: candidates.length, htmlBytes: html.length }, "debug");
     if (!candidates.length) throw createExtractionError("no_article", "Could not extract article content from this page.");
     const adapterGate = Boolean(adapter.detectAccessGate?.(doc));
     const scored = candidates.map((candidate) => ({
@@ -74,6 +85,7 @@ export async function extractArticle(url, options = {}) {
     directArticle = asArticle(scored[0], url);
   } catch (error) {
     directError = error;
+    options.log?.("extract.timing", { totalMs: Math.round(now() - startedAt), failed: true, error: error instanceof Error ? error.message : String(error) }, "debug");
     options.log?.("fetch.direct.failed", error instanceof Error ? error.message : "Direct extraction failed");
   }
 

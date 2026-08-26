@@ -11,6 +11,10 @@ function responseText(data) {
   return String(data);
 }
 
+function now() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
 function extractionError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -18,23 +22,32 @@ function extractionError(code, message) {
 }
 
 async function fetchNative(url, options) {
-  const response = await CapacitorHttp.get({
-    url,
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
-      Accept: "text/html,application/xhtml+xml",
-      ...(options.headers || {}),
-    },
-    responseType: "text",
-    connectTimeout: Math.min(8000, TRANSPORT_CONFIG.FETCH_TIMEOUT),
-    readTimeout: TRANSPORT_CONFIG.FETCH_TIMEOUT,
-  });
-  const status = Number(response?.status || 0);
-  if (status < 200 || status >= 300) throw extractionError(`http_${status}`, `HTTP ${status}`);
-  return responseText(response?.data);
+  const startedAt = now();
+  try {
+    const response = await CapacitorHttp.get({
+      url,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+        ...(options.headers || {}),
+      },
+      responseType: "text",
+      connectTimeout: Math.min(8000, TRANSPORT_CONFIG.FETCH_TIMEOUT),
+      readTimeout: TRANSPORT_CONFIG.FETCH_TIMEOUT,
+    });
+    const status = Number(response?.status || 0);
+    if (status < 200 || status >= 300) throw extractionError(`http_${status}`, `HTTP ${status}`);
+    const html = responseText(response?.data);
+    options.log?.("fetch.native.timing", { status, durationMs: Math.round(now() - startedAt), htmlBytes: html.length }, "debug");
+    return html;
+  } catch (error) {
+    options.log?.("fetch.native.timing", { durationMs: Math.round(now() - startedAt), failed: true, error: error instanceof Error ? error.message : String(error) }, "debug");
+    throw error;
+  }
 }
 
 async function fetchBrowser(url, options) {
+  const startedAt = now();
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), options.timeout || TRANSPORT_CONFIG.FETCH_TIMEOUT) : null;
   try {
@@ -47,7 +60,12 @@ async function fetchBrowser(url, options) {
       },
     });
     if (!response.ok) throw extractionError(`http_${response.status}`, `HTTP ${response.status}`);
-    return await response.text();
+    const html = await response.text();
+    options.log?.("fetch.browser.timing", { status: response.status, durationMs: Math.round(now() - startedAt), htmlBytes: html.length }, "debug");
+    return html;
+  } catch (error) {
+    options.log?.("fetch.browser.timing", { durationMs: Math.round(now() - startedAt), failed: true, error: error instanceof Error ? error.message : String(error) }, "debug");
+    throw error;
   } finally {
     if (timer) clearTimeout(timer);
   }

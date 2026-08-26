@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.5-content-cleanup",
+  "version": "2.6.6-load-timing-diagnostic",
   "type": "module",
   "license": "MIT",
   "scripts": {
