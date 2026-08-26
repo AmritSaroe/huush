@@ -3,12 +3,11 @@
  * restrained lime highlights, and a complete theme system with calm focus mode.
  */
 import "./styles.css";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, SystemBars, SystemBarsStyle } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Share } from "@capacitor/share";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Preferences } from "@capacitor/preferences";
-import { StatusBar, Style } from "@capacitor/status-bar";
 import { Readability } from "@mozilla/readability";
 import { extractArticle } from "./lib/fetcher.js";
 import { extractSmryArticle, getSmryReaderUrl } from "./lib/smry.js";
@@ -107,9 +106,7 @@ const state = {
 const readerContentCache = new Map();
 
 const swipeGesture = { card: null, startX: 0, deltaX: 0, active: false, suppressClick: false };
-let nativeStatusBarConfigured = false;
 let nativeStatusBarStyle = "";
-let nativeStatusBarColor = "";
 let lastStatusBarConfig = "";
 let pendingStatusBarConfig = null;
 let nativeStatusBarSyncPromise = null;
@@ -284,7 +281,7 @@ function sanitizeArticleHtml(html, baseUrl, heroFallback = "") {
 function syncNativeStatusBar() {
   if (!Capacitor.isNativePlatform()) return;
   const theme = effectiveTheme();
-  const style = theme === "dark" ? Style.Dark : Style.Light;
+  const style = theme === "dark" ? SystemBarsStyle.Dark : SystemBarsStyle.Light;
   const themeColor = { light: "#F6F1E8", dark: "#171716", sepia: "#EEE2CB" }[theme] || "#F6F1E8";
   const configKey = `${theme}-${style}-${themeColor}`;
   if (lastStatusBarConfig === configKey) return;
@@ -295,23 +292,20 @@ function syncNativeStatusBar() {
       while (pendingStatusBarConfig) {
         const next = pendingStatusBarConfig;
         pendingStatusBarConfig = null;
-        if (!nativeStatusBarConfigured) {
-          await StatusBar.setOverlaysWebView({ overlay: false });
-          nativeStatusBarConfigured = true;
-        }
+        // Capacitor 8 System Bars owns modern Android edge-to-edge. Do not
+        // call the legacy StatusBar overlay API here: on Android 15/16 it is
+        // unsupported and can fight the WebView inset/layout owner.
         if (nativeStatusBarStyle !== next.style) {
-          await StatusBar.setStyle({ style: next.style });
+          await SystemBars.setStyle({ style: next.style });
           nativeStatusBarStyle = next.style;
         }
-        if (nativeStatusBarColor !== next.themeColor) {
-          await StatusBar.setBackgroundColor({ color: next.themeColor });
-          nativeStatusBarColor = next.themeColor;
-        }
+        // Modern Android edge-to-edge system bars are transparent by design;
+        // the WebView paints the active theme into the safe-area region.
         lastStatusBarConfig = next.configKey;
       }
     } catch (error) {
       lastStatusBarConfig = "";
-      logCapacitorError("StatusBar", "sync", error);
+      logCapacitorError("SystemBars", "sync", error);
     } finally {
       nativeStatusBarSyncPromise = null;
       if (pendingStatusBarConfig) syncNativeStatusBar();

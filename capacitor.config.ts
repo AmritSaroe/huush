@@ -18,7 +18,7 @@ const config: CapacitorConfig = {
     CapacitorHttp: {
       enabled: true,
     },
-    StatusBar: {
+    SystemBars: {
       insetsHandling: "css",
     },
   },
