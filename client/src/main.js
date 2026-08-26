@@ -114,6 +114,7 @@ let settingsInteractionUnlockTimeout = 0;
 let screenEnteredAt = Date.now();
 let lastPauseAt = 0;
 let searchLogTimeout = 0;
+let searchArticlesTimeout = 0;
 let settingsInteractionLocked = false;
 let readerLastScrollTop = 0;
 let fontSizeUpdateFrame = 0;
@@ -681,6 +682,20 @@ function articleListMarkup() {
   return `<section class="saved-section" aria-label="Saved articles"><div class="section-heading"><div><p>${state.activeCollectionId === "all" ? "Saved articles" : escapeHtml(state.collections.find((item) => item.id === state.activeCollectionId)?.name || "Collection")}</p><h2>Worth a return.</h2></div><span>${visibleArticles.length} ${visibleArticles.length === 1 ? "piece" : "pieces"}</span></div><div class="article-card-list">${visibleArticles.map((article, index) => `<div class="swipe-card" data-swipe-card data-id="${article.id}"><button class="swipe-card__delete" data-action="delete-article" data-id="${article.id}" aria-label="Delete ${escapeHtml(article.title)}">${icon("trash", 20)}<span>Delete</span></button><div class="article-card-row"><button class="article-card" data-action="open-article" data-id="${article.id}">${editorialTileMarkup(article, index)}<span class="article-card__copy"><span class="article-card__source">${escapeHtml(article.source || "Huush")}${article.previewOnly ? '<em class="article-card__status">Preview</em>' : ""}</span><strong>${escapeHtml(article.title)}</strong><small>${articleReadingTime(article)} · saved ${formatDate(article.dateAdded)}</small></span><span class="article-card__arrow">${icon("chevron", 20)}</span></button><button class="article-card__delete-desktop" data-action="delete-article" data-id="${article.id}" aria-label="Delete ${escapeHtml(article.title)}">${icon("trash", 16)}<span>Delete</span></button></div></div>`).join("")}</div></section>`;
 }
 
+function updateArticleList() {
+  const container = document.querySelector("[data-article-list]");
+  if (!container || !document.querySelector("[data-search-articles]")) return;
+  container.innerHTML = articleListMarkup();
+}
+
+function scheduleArticleListUpdate() {
+  window.clearTimeout(searchArticlesTimeout);
+  searchArticlesTimeout = window.setTimeout(() => {
+    searchArticlesTimeout = 0;
+    updateArticleList();
+  }, 120);
+}
+
 function homeCaptureMarkup() {
   const stage = state.busy ? `<p class="capture-stage" aria-live="polite">${escapeHtml(state.saveStage || "Working…")}</p>` : "";
   return `<section class="home-capture" aria-label="Save an article"><form class="home-capture-form" id="home-capture-form"><label class="home-url-field"><span class="sr-only">Paste an article link</span>${icon("external", 18)}<input name="article-url" type="url" autocomplete="url" inputmode="url" placeholder="Paste a link..." ${state.busy ? "disabled" : ""} /></label><button class="home-capture-submit ${state.busy ? "is-busy" : ""}" type="submit" ${state.busy ? "disabled" : ""}>${state.busy ? "<span class=\"spinner\"></span>" : icon("plus", 16)}<span>${state.busy ? "Saving…" : "Add article"}</span></button></form>${stage}</section>`;
@@ -698,7 +713,7 @@ function libraryMarkup() {
     ${homeCaptureMarkup()}
     ${collectionMarkup()}
     ${librarySearchMarkup()}
-    ${articleListMarkup()}
+    <div data-article-list>${articleListMarkup()}</div>
   </main>${bottomNavigationMarkup()}${captureMarkup()}`;
 }
 
@@ -1705,14 +1720,7 @@ document.addEventListener("input", (event) => {
   }
   if (event.target.matches("[data-search-articles]")) {
     state.searchQuery = event.target.value;
-    render();
-    requestAnimationFrame(() => {
-      const field = document.querySelector("[data-search-articles]");
-      if (field) {
-        field.focus();
-        field.setSelectionRange(state.searchQuery.length, state.searchQuery.length);
-      }
-    });
+    scheduleArticleListUpdate();
     return;
   }
   if (event.target.matches("[data-font-size-range]")) {

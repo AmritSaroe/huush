@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.2-reader-toolbar-clean",
+  "version": "2.6.3-search-render-optimization",
   "type": "module",
   "license": "MIT",
   "scripts": {
