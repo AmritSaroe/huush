@@ -7,6 +7,7 @@ export const SOURCE_MAP = {
   "indianexpress.com": "Indian Express",
   "thehindu.com": "The Hindu",
   "thehindubusinessline.com": "BusinessLine",
+  "ideasforindia.in": "Ideas for India",
   "financialexpress.com": "Financial Express",
   "finshots.in": "Finshots",
   "pib.gov.in": "Press Information Bureau",
