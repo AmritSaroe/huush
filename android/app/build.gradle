@@ -7,8 +7,8 @@ android {
         applicationId "com.amritsaroe.huush"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 41
-        versionName "2.6.8-et-prime-preview"
+        versionCode 42
+        versionName "2.6.9-businessline-structured"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
