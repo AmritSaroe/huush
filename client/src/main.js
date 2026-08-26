@@ -60,6 +60,8 @@ function preloadReadingFonts() {
 const state = {
   activeTab: "library",
   article: null,
+  articleTemporary: false,
+  articleHistory: [],
   articleScrollTop: 0,
   settingsScrollTop: 0,
   settingsOpen: false,
@@ -95,6 +97,10 @@ const state = {
   confirmCollectionDelete: null,
   confirmClearLogs: false,
   saveStage: "",
+  linkedArticleLoading: false,
+  linkedArticleError: null,
+  linkedArticleUrl: "",
+  linkedArticleRequestToken: null,
   viewTransition: "",
 };
 
@@ -801,9 +807,14 @@ function articleContentMarkup(content = "", baseUrl = "") {
 function readerMarkup() {
   const article = state.article;
   if (!article) return libraryMarkup();
+  const isTemporary = state.articleTemporary;
   const previewNotice = article.previewOnly ? `<aside class="article-preview-notice" aria-label="Preview notice"><strong>Preview only — open in browser</strong><p>The publisher returned only a short public excerpt. You can try smry’s public extraction route, or continue at the original source.</p><div class="article-preview-notice__actions"><button data-action="retry-smry" ${state.smryBusy ? "disabled" : ""}>${state.smryBusy ? "Trying smry…" : "Try smry extraction"}</button><a href="${escapeHtml(getSmryReaderUrl(article.url))}" target="_blank" rel="noopener noreferrer">Open in smry ${icon("external", 15)}</a><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a></div></aside>` : "";
   const content = cachedArticleContentMarkup(article);
-  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><div class="reader-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.articleProgress}" style="--progress:${state.articleProgress}%"></div><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to saved articles">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity">${logoMarkup(true)}</div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="bookmark-article" aria-label="Article saved in your library">${icon("bookmark", 20)}</button><button class="reader-tool" data-action="open-reader-menu" aria-label="Open Reader menu">${icon("menu", 20)}</button><button class="reader-tool" data-action="share-article" aria-label="Share article">${icon("share", 20)}</button><button class="reader-tool" data-action="open-reader-theme" aria-label="Reading surface">${icon(effectiveTheme() === "light" ? "moon" : "sun", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source">${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions"><button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
+  const bookmarkAction = isTemporary ? "save-temporary-article" : "bookmark-article";
+  const bookmarkLabel = isTemporary ? "Save article to library" : "Article saved in your library";
+  const backLabel = state.articleHistory.length ? "Back to previous article" : "Back to saved articles";
+  const footerAction = isTemporary ? `<button class="collection-organize-button linked-reader-save" data-action="save-temporary-article">Save to library</button>` : `<button class="collection-organize-button" data-action="open-organize" data-id="${article.id}">Organize</button>`;
+  return `<main class="reader-view ${state.focusMode ? "is-focus" : ""}"><div class="reader-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${state.articleProgress}" style="--progress:${state.articleProgress}%"></div><header class="reader-toolbar ${state.readerToolbarHidden ? "is-hidden" : ""}" aria-hidden="${state.readerToolbarHidden ? "true" : "false"}"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="${backLabel}">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity">${logoMarkup(true)}</div><div class="reader-toolbar__actions"><button class="reader-tool" data-action="${bookmarkAction}" aria-label="${bookmarkLabel}">${icon("bookmark", 20)}</button><button class="reader-tool" data-action="open-reader-menu" aria-label="Open Reader menu">${icon("menu", 20)}</button><button class="reader-tool" data-action="share-article" aria-label="Share article">${icon("share", 20)}</button><button class="reader-tool" data-action="open-reader-theme" aria-label="Reading surface">${icon(effectiveTheme() === "light" ? "moon" : "sun", 20)}</button></div></header><section class="reader-scroll-surface" aria-label="Article reader"><article class="article-reading" data-font="${state.settings.font}"><section class="article-reading__opening"><p class="article-reading__source">${escapeHtml(article.source)}</p><h1>${escapeHtml(article.title)}</h1><div class="article-reading__meta"><span>By ${escapeHtml(article.byline)}</span><i></i><span>${formatDate(article.dateAdded)} · ${articleReadingTime(article)}</span></div></section><div class="article-reading__body">${previewNotice}${content}</div><footer class="article-reading__footer" aria-label="Article actions">${footerAction}${article.previewOnly ? "" : `<a class="article-reading__source-action" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Open source ${icon("external", 15)}</a>`}</footer></article></section><p class="focus-announce" aria-live="polite"></p></main>${settingsMarkup()}`;
 }
 
 function fontOptionsMarkup() {
@@ -835,7 +846,7 @@ function render() {
   const useNativeViewTransition = Boolean(transition && document.startViewTransition && !reducedMotionPreferred());
   const update = () => {
     const shellClass = transition && !useNativeViewTransition ? ` app-shell--view-${transition}` : "";
-    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${state.confirmCollectionDelete ? collectionDeleteConfirmMarkup() : ""}${state.confirmClearLogs ? clearLogsConfirmMarkup() : ""}${state.article ? readerMenuMarkup() : ""}${toastMarkup()}</div>`;
+    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : (state.linkedArticleLoading || state.linkedArticleError) ? linkedReaderStateMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${state.confirmCollectionDelete ? collectionDeleteConfirmMarkup() : ""}${state.confirmClearLogs ? clearLogsConfirmMarkup() : ""}${state.article ? readerMenuMarkup() : ""}${toastMarkup()}</div>`;
     applySettings();
     if (transition) {
       const nextShell = root.querySelector(".app-shell");
@@ -893,6 +904,12 @@ async function handleExtractUrl(url) {
     const imageCount = (article.content || "").match(/<img\b/gi)?.length || 0;
     log("article.save.success", { url, parseTimeMs: Math.round(performance.now() - startedAt), wordCount: String(article.textContent || stripHtml(article.content || "")).split(/\s+/).filter(Boolean).length, imageCount });
     state.article = savedArticle;
+    state.articleTemporary = false;
+    state.articleHistory = [];
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = "";
+    state.linkedArticleRequestToken = null;
     state.collectionSheet = { type: "organize", articleId: savedArticle.id };
     state.articleScrollTop = 0;
     readerLastScrollTop = 0;
@@ -941,11 +958,15 @@ async function retryWithSmry() {
   try {
     const smryArticle = await extractSmryArticle(sourceArticle.url, sourceArticle);
     if (state.smryRequestToken !== requestToken || state.article?.id !== sourceArticle.id) return;
-    const savedArticle = await saveArticle({ ...sourceArticle, ...smryArticle, id: sourceArticle.id, collectionIds: sourceArticle.collectionIds });
+    const refreshedArticle = { ...sourceArticle, ...smryArticle, id: sourceArticle.id, collectionIds: sourceArticle.collectionIds };
+    if (state.articleTemporary) {
+      state.article = refreshedArticle;
+    } else {
+      state.article = await saveArticle(refreshedArticle);
+    }
     if (state.smryRequestToken !== requestToken || state.article?.id !== sourceArticle.id) return;
-    state.article = savedArticle;
     log("article.smry.loaded", `${smryArticle.provenance.blocks} blocks · ${smryArticle.textContent.length} characters`);
-    showToast("Full article loaded via smry.", "success");
+    showToast(state.articleTemporary ? "Full article loaded for this session." : "Full article loaded via smry.", "success");
   } catch (error) {
     if (state.smryRequestToken !== requestToken || state.article?.id !== sourceArticle.id) return;
     log("article.smry.failed", error instanceof Error ? `${error.code || "error"} · ${error.message}` : "smry extraction failed");
@@ -1103,6 +1124,100 @@ async function shareCurrentArticle() {
   }
 }
 
+function readerHistorySnapshot() {
+  const surface = document.querySelector(".reader-scroll-surface");
+  return {
+    article: state.article,
+    articleTemporary: state.articleTemporary,
+    articleScrollTop: surface?.scrollTop ?? state.articleScrollTop,
+    articleProgress: state.articleProgress,
+    readerToolbarHidden: state.readerToolbarHidden,
+    focusMode: state.focusMode,
+  };
+}
+
+function pushReaderHistory() {
+  if (!state.article) return;
+  state.articleHistory.push(readerHistorySnapshot());
+}
+
+function restorePreviousArticle() {
+  const snapshot = state.articleHistory.pop();
+  if (!snapshot) return false;
+  invalidateSmryRequest();
+  state.article = snapshot.article;
+  state.articleTemporary = snapshot.articleTemporary;
+  state.articleScrollTop = snapshot.articleScrollTop;
+  state.articleProgress = snapshot.articleProgress;
+  state.readerToolbarHidden = snapshot.readerToolbarHidden;
+  state.focusMode = snapshot.focusMode;
+  state.linkedArticleLoading = false;
+  state.linkedArticleError = null;
+  state.linkedArticleUrl = "";
+  state.linkedArticleRequestToken = null;
+  render();
+  return true;
+}
+
+function resolveReaderLink(target) {
+  try {
+    const url = new URL(target?.href || target?.getAttribute("href") || "", state.article?.url || window.location.href);
+    return /^https?:$/i.test(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function linkedReaderStateMarkup() {
+  const link = state.linkedArticleUrl;
+  const error = state.linkedArticleError;
+  return `<main class="reader-view linked-reader-view"><header class="reader-toolbar"><button class="reader-tool reader-tool--back" data-action="back-library" aria-label="Back to article">${icon("arrowLeft", 22)}</button><div class="reader-toolbar__identity">${logoMarkup(true)}</div></header><section class="reader-scroll-surface linked-reader-state" aria-live="polite" aria-busy="${state.linkedArticleLoading ? "true" : "false"}">${state.linkedArticleLoading ? `<div class="linked-reader-state__content" role="status"><span class="spinner" aria-hidden="true"></span><h1>Opening linked article.</h1><p>Huush is fetching it for this reading session. It will not be saved unless you choose Save.</p></div>` : `<div class="linked-reader-state__content" role="alert"><h1>Couldn’t open linked article.</h1><p>${escapeHtml(error || "This link could not be extracted right now.")}</p><div class="linked-reader-state__actions"><button data-action="retry-linked-article">Try again</button><a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Open in browser ${icon("external", 15)}</a></div></div>`}</section></main>`;
+}
+
+async function openLinkedArticle(url, { pushHistory = true } = {}) {
+  if (!state.article || state.linkedArticleLoading) return;
+  const resolvedUrl = resolveReaderLink({ href: url });
+  if (!resolvedUrl) return;
+  const requestToken = Symbol("linked-article-request");
+  if (pushHistory) pushReaderHistory();
+  state.linkedArticleLoading = true;
+  state.linkedArticleError = null;
+  state.linkedArticleUrl = resolvedUrl;
+  state.linkedArticleRequestToken = requestToken;
+  state.readerMenuOpen = false;
+  state.readerThemeOpen = false;
+  state.focusMode = false;
+  state.readerToolbarHidden = false;
+  state.articleScrollTop = 0;
+  state.articleProgress = 0;
+  render();
+  try {
+    const linkedArticle = await extractArticle(resolvedUrl, {
+      log: (event, detail, level = "info") => log(event, detail, level),
+    });
+    if (state.linkedArticleRequestToken !== requestToken) return;
+    state.article = linkedArticle;
+    state.articleTemporary = true;
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = resolvedUrl;
+    state.linkedArticleRequestToken = null;
+    state.articleScrollTop = 0;
+    state.articleProgress = 0;
+    state.readerToolbarHidden = false;
+    state.focusMode = false;
+    logger.log("article.linked.open", { url: resolvedUrl, title: linkedArticle.title, temporary: true });
+    render();
+  } catch (error) {
+    if (state.linkedArticleRequestToken !== requestToken) return;
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = error instanceof Error ? error.message : "Could not extract this linked article.";
+    state.linkedArticleRequestToken = null;
+    logger.log("article.linked.failed", { url: resolvedUrl, error: state.linkedArticleError }, "warn");
+    render();
+  }
+}
+
 function navigateBack() {
   if (state.logViewerOpen) {
     state.logViewerOpen = false;
@@ -1131,11 +1246,20 @@ function navigateBack() {
     setFocusMode(false);
     return true;
   }
+  if (state.linkedArticleLoading || state.linkedArticleError || state.articleHistory.length) {
+    if (restorePreviousArticle()) return true;
+  }
   if (state.article) {
     invalidateSmryRequest();
     // Reader navigation uses a direct replacement so a previous article cannot bleed through the new header.
     state.viewTransition = "";
     state.article = null;
+    state.articleTemporary = false;
+    state.articleHistory = [];
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = "";
+    state.linkedArticleRequestToken = null;
     state.articleScrollTop = 0;
     state.articleProgress = 0;
     readerLastScrollTop = 0;
@@ -1164,6 +1288,12 @@ async function handleAction(target) {
     setViewTransition("back");
     state.activeTab = "library";
     state.article = null;
+    state.articleTemporary = false;
+    state.articleHistory = [];
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = "";
+    state.linkedArticleRequestToken = null;
     state.captureOpen = false;
     state.readerMenuOpen = false;
     state.readerThemeOpen = false;
@@ -1181,6 +1311,12 @@ async function handleAction(target) {
     setViewTransition("forward");
     state.activeTab = "tags";
     state.article = null;
+    state.articleTemporary = false;
+    state.articleHistory = [];
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = "";
+    state.linkedArticleRequestToken = null;
     state.captureOpen = false;
     state.settingsOpen = false;
     state.readerMenuOpen = false;
@@ -1199,6 +1335,12 @@ async function handleAction(target) {
     void ensureFontPickerFontsLoaded();
     state.activeTab = "settings";
     state.article = null;
+    state.articleTemporary = false;
+    state.articleHistory = [];
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = "";
+    state.linkedArticleRequestToken = null;
     state.captureOpen = false;
     state.settingsOpen = false;
     state.readerMenuOpen = false;
@@ -1222,6 +1364,27 @@ async function handleAction(target) {
     render();
     return;
   }
+  if (action === "retry-linked-article") {
+    if (state.linkedArticleUrl) {
+      state.linkedArticleError = null;
+      void openLinkedArticle(state.linkedArticleUrl, { pushHistory: false });
+    }
+    return;
+  }
+  if (action === "save-temporary-article") {
+    if (!state.article || !state.articleTemporary) return;
+    const temporaryArticle = state.article;
+    try {
+      state.article = await saveArticle(temporaryArticle);
+      state.articleTemporary = false;
+      logger.log("article.linked.saved", { id: state.article.id, url: state.article.url, title: state.article.title });
+      showToast("Saved to your reading shelf.", "success");
+    } catch (error) {
+      log("article.linked.save.failed", error instanceof Error ? error.message : "Could not save linked article.", "error");
+      showToast("Couldn’t save this linked article.", "error");
+    }
+    return;
+  }
   if (action === "close-capture") {
     closeVisibleSheet(() => { state.captureOpen = false; render(); });
     return;
@@ -1243,6 +1406,12 @@ async function handleAction(target) {
     // Do not snapshot the full root for reader navigation: old/new long-form surfaces can overlap during the transition.
     state.viewTransition = "";
     state.article = state.articles.find((article) => article.id === target.dataset.id) || null;
+    state.articleTemporary = false;
+    state.articleHistory = [];
+    state.linkedArticleLoading = false;
+    state.linkedArticleError = null;
+    state.linkedArticleUrl = "";
+    state.linkedArticleRequestToken = null;
     state.collectionSheet = null;
     state.readerMenuOpen = false;
     state.readerThemeOpen = false;
@@ -1572,6 +1741,16 @@ document.addEventListener("click", (event) => {
   if (actionTarget) {
     void handleAction(actionTarget);
     return;
+  }
+  const linkedArticleTarget = event.target.closest(".article-reading__body a[href]");
+  if (state.article && linkedArticleTarget && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+    const linkedUrl = resolveReaderLink(linkedArticleTarget);
+    if (linkedUrl) {
+      event.preventDefault();
+      event.stopPropagation();
+      void openLinkedArticle(linkedUrl);
+      return;
+    }
   }
   const readerSurface = event.target.closest(".reader-scroll-surface");
   const protectedTarget = event.target.closest("a, button, input, textarea, select, img, figure, figcaption");

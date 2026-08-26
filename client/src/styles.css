@@ -1479,3 +1479,19 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
   :root[data-canonical-ui="mobile"] .reader-toolbar{flex-basis:64px;min-height:64px;height:64px;padding-top:calc(8px + var(--wm-safe-top, env(safe-area-inset-top)));padding-bottom:8px}
   :root[data-canonical-ui="mobile"] .bottom-navigation{min-height:83px;padding-top:8px;padding-bottom:calc(8px + var(--wm-safe-bottom, env(safe-area-inset-bottom)))}
 }
+
+
+/* Temporary linked-article reader state. */
+:root[data-canonical-ui="mobile"] .linked-reader-view .reader-toolbar{grid-template-columns:46px minmax(0,1fr);}
+:root[data-canonical-ui="mobile"] .linked-reader-state{display:grid;place-items:center;padding:32px var(--wm-reading-gutter) calc(96px + var(--wm-safe-bottom));text-align:center;}
+:root[data-canonical-ui="mobile"] .linked-reader-state__content{width:min(100%,520px);}
+:root[data-canonical-ui="mobile"] .linked-reader-state__content .spinner{display:inline-block;width:24px;height:24px;margin-bottom:18px;border-width:3px;color:var(--ink);}
+:root[data-canonical-ui="mobile"] .linked-reader-state__content h1{margin:0 0 12px;font-family:var(--font-serif);font-size:clamp(28px,8vw,40px);font-weight:400;letter-spacing:-.05em;line-height:1.1;}
+:root[data-canonical-ui="mobile"] .linked-reader-state__content p{margin:0;color:var(--muted);font-size:16px;line-height:1.6;}
+:root[data-canonical-ui="mobile"] .linked-reader-state__actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:24px;}
+:root[data-canonical-ui="mobile"] .linked-reader-state__actions button,
+:root[data-canonical-ui="mobile"] .linked-reader-state__actions a,
+:root[data-canonical-ui="mobile"] .linked-reader-save{display:inline-flex;min-height:48px;align-items:center;justify-content:center;padding:10px 16px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);font-size:14px;font-weight:700;text-decoration:none;}
+:root[data-canonical-ui="mobile"] .linked-reader-state__actions button:first-child,
+:root[data-canonical-ui="mobile"] .linked-reader-save{border-color:var(--ink);background:var(--ink);color:var(--paper);}
+@media (prefers-reduced-motion:reduce){:root[data-canonical-ui="mobile"] .linked-reader-state__content .spinner{animation:none;}}
