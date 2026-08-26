@@ -532,14 +532,17 @@ const HUUSH_MARK_LINES = [
   "M 34.08,188.60 C 58.18,182.53 84.26,185.57 108.35,196.64",
   "M 270.92,188.60 C 246.82,182.53 220.74,185.57 196.65,196.64",
 ];
+const HUUSH_MARK_COMPACT_LINES = [HUUSH_MARK_LINES[0], HUUSH_MARK_LINES[1], HUUSH_MARK_LINES[6], HUUSH_MARK_LINES[7]];
 
-function quietBrandSymbolMarkup(size = 20) {
-  const lineMarkup = HUUSH_MARK_LINES.map((path) => `<path d="${path}"/>`).join("");
-  return `<svg width="${size}" height="${size}" viewBox="0 0 305 328" fill="none" aria-hidden="true" focusable="false"><path d="${HUUSH_MARK_OUTER}" fill="currentColor"/><g stroke="var(--bg,#F7F0E7)" stroke-width="5.6" stroke-linecap="round">${lineMarkup}</g></svg>`;
+function quietBrandSymbolMarkup(size = 20, detail = "compact") {
+  const linePaths = detail === "full" ? HUUSH_MARK_LINES : HUUSH_MARK_COMPACT_LINES;
+  const lineMarkup = linePaths.map((path) => `<path d="${path}"/>`).join("");
+  const strokeWidth = detail === "full" ? 5.6 : 8.4;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 305 328" fill="none" aria-hidden="true" focusable="false"><path d="${HUUSH_MARK_OUTER}" fill="currentColor"/><g stroke="var(--bg,#F7F0E7)" stroke-width="${strokeWidth}" stroke-linecap="round">${lineMarkup}</g></svg>`;
 }
 
 function icon(name, size = 20) {
-  if (name === "book" || name === "mark") return quietBrandSymbolMarkup(size);
+  if (name === "book" || name === "mark") return quietBrandSymbolMarkup(size, name === "mark" ? "full" : "compact");
   const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
   const paths = {
     plus: "<path d=\"M12 5v14M5 12h14\"/>",

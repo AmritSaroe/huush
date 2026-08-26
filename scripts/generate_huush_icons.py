@@ -27,6 +27,7 @@ LINE_CURVES = [
     ((34.08, 166.54), (58.18, 160.47), (84.26, 163.51), (108.35, 174.50)),
     ((34.08, 188.60), (58.18, 182.53), (84.26, 185.57), (108.35, 196.64)),
 ]
+COMPACT_LINE_CURVES = [LINE_CURVES[0], LINE_CURVES[3]]
 
 
 def cubic(p0, p1, p2, p3, t):
@@ -38,7 +39,7 @@ def cubic(p0, p1, p2, p3, t):
 
 
 def mark_geometry(canvas_size):
-    symbol_width = canvas_size * 0.60
+    symbol_width = canvas_size * 0.52
     symbol_height = symbol_width * 328 / 305
     origin_x = (canvas_size - symbol_width) / 2
     origin_y = (canvas_size - symbol_height) / 2
@@ -48,7 +49,7 @@ def mark_geometry(canvas_size):
 
     outer = [convert(point) for point in OUTER]
     lines = []
-    for curve in LINE_CURVES:
+    for curve in COMPACT_LINE_CURVES:
         left = [cubic(*curve, step / 20) for step in range(21)]
         right = [(305 - x, y) for x, y in left]
         lines.extend([[convert(point) for point in left], [convert(point) for point in right]])

@@ -42,3 +42,6 @@ Library branding placement fix: the live Vite app now renders one compact `.edit
 
 
 Quiet Editorial coded-logo verification: the live app renders one top-corner brand with an inline SVG and no `<img>` logo. The brand symbol contains the shared outer vector path plus eight internal page-line paths (four per side), and the Library navigation book uses the same coded geometry. The content lockup remains removed and navigation labels remain Library/Tags/Settings. The highest-density Android fallback was visually checked and shows the centered solid twin-page mark with cream lines.
+
+
+Responsive logo/name verification: the live document title is `Huush — quiet reading`. Library branding renders as inline SVG with one outer symbol path plus eight detail paths (four per side), while the small Library navigation icon renders the same silhouette with four detail paths (two per side). No logo images are present in the live DOM. The three-item navigation remains intact.
