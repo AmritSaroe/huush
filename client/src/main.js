@@ -61,6 +61,7 @@ const state = {
   activeTab: "library",
   article: null,
   articleScrollTop: 0,
+  settingsScrollTop: 0,
   settingsOpen: false,
   captureOpen: false,
   readerMenuOpen: false,
@@ -806,6 +807,8 @@ function toastMarkup() {
 
 function render() {
   const root = document.querySelector("#root");
+  const currentSettingsScreen = root.querySelector(".settings-screen");
+  if (currentSettingsScreen) state.settingsScrollTop = currentSettingsScreen.scrollTop;
   const transition = state.viewTransition;
   state.viewTransition = "";
   const useNativeViewTransition = Boolean(transition && document.startViewTransition && !reducedMotionPreferred());
@@ -816,6 +819,10 @@ function render() {
     if (transition) {
       const nextShell = root.querySelector(".app-shell");
       window.setTimeout(() => nextShell?.classList.remove(`app-shell--view-${transition}`), reducedMotionPreferred() ? 0 : 420);
+    }
+    if (state.activeTab === "settings" && !state.article && !state.logViewerOpen) {
+      const settingsScreen = document.querySelector(".settings-screen");
+      if (settingsScreen) settingsScreen.scrollTop = Math.max(0, state.settingsScrollTop);
     }
     if (state.article) requestAnimationFrame(() => {
       const surface = document.querySelector(".reader-scroll-surface");

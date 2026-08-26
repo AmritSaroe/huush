@@ -45,3 +45,18 @@ Quiet Editorial coded-logo verification: the live app renders one top-corner bra
 
 
 Responsive logo/name verification: the live document title is `Huush — quiet reading`. Library branding renders as inline SVG with one outer symbol path plus eight detail paths (four per side), while the small Library navigation icon renders the same silhouette with four detail paths (two per side). No logo images are present in the live DOM. The three-item navigation remains intact.
+
+
+## 2026-08-26 Settings scroll preservation check
+
+On the local Huush app, Settings was scrolled to the lower About section and **Open source licenses** was clicked. The resulting confirmation toast appeared while the Settings dashboard remained at the same lower scroll position; it did not jump back to the top. This verifies the new `settingsScrollTop` capture/restore path for the `showToast()` render triggered by `open-licenses`.
+
+
+## 2026-08-26 Developer-option scroll race check
+
+A browser test unlocked Developer options while Settings was scrolled to the lower section. The first implementation restored `scrollTop` in `requestAnimationFrame`, so two immediate developer-toggle renders captured an interim `scrollTop` of 0. The restoration was changed to synchronous assignment immediately after `innerHTML` replacement; this must be retested after the hot reload.
+
+
+## 2026-08-26 Synchronous developer-option restoration verified
+
+After the hot reload, Settings with Developer options enabled was scrolled to `scrollTop: 1504`. Clicking both **Logging enabled** and **Verbose logging** in immediate succession kept the scroll position at `1504` after each render and at the end. This confirms the synchronous restoration removes the rapid-render race.
