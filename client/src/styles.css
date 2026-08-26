@@ -1408,9 +1408,11 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
 :root[data-canonical-ui="mobile"] .bottom-navigation__add{display:none!important}
 :root[data-canonical-ui="mobile"] .reader-view{height:100dvh;min-height:100dvh}
 :root[data-canonical-ui="mobile"] .reader-toolbar{
-  flex-basis:64px;
-  min-height:64px;
-  height:64px;
+  /* Safe-area padding is inside the box; reserve a separate 64px control row
+     so Android cannot compress the toolbar’s contents into the status-bar band. */
+  flex-basis:calc(64px + var(--wm-safe-top, env(safe-area-inset-top)));
+  min-height:calc(64px + var(--wm-safe-top, env(safe-area-inset-top)));
+  height:calc(64px + var(--wm-safe-top, env(safe-area-inset-top)));
   padding:calc(8px + var(--wm-safe-top, env(safe-area-inset-top))) 20px 8px;
 }
 :root[data-canonical-ui="mobile"] .reader-toolbar__identity .brand__name{font-size:19px}
@@ -1476,7 +1478,7 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
   :root[data-canonical-ui="mobile"] .daily-brief--clean{margin-top:48px;margin-bottom:49px}
   :root[data-canonical-ui="mobile"] .article-card-list{grid-template-columns:1fr;gap:34px}
   :root[data-canonical-ui="mobile"] .article-card__copy strong{font-size:22px}
-  :root[data-canonical-ui="mobile"] .reader-toolbar{flex-basis:64px;min-height:64px;height:64px;padding-top:calc(8px + var(--wm-safe-top, env(safe-area-inset-top)));padding-bottom:8px}
+  :root[data-canonical-ui="mobile"] .reader-toolbar{flex-basis:calc(64px + var(--wm-safe-top, env(safe-area-inset-top)));min-height:calc(64px + var(--wm-safe-top, env(safe-area-inset-top)));height:calc(64px + var(--wm-safe-top, env(safe-area-inset-top)));padding-top:calc(8px + var(--wm-safe-top, env(safe-area-inset-top)));padding-bottom:8px}
   :root[data-canonical-ui="mobile"] .bottom-navigation{min-height:83px;padding-top:8px;padding-bottom:calc(8px + var(--wm-safe-bottom, env(safe-area-inset-bottom)))}
 }
 

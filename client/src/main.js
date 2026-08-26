@@ -285,7 +285,6 @@ function syncNativeStatusBar() {
   const theme = effectiveTheme();
   const style = theme === "dark" ? SystemBarsStyle.Dark : SystemBarsStyle.Light;
   const themeColor = { light: "#F6F1E8", dark: "#171716", sepia: "#EEE2CB" }[theme] || "#F6F1E8";
-  globalThis.HuushSystemBars?.setStatusBarScrimColor(themeColor);
   const configKey = `${theme}-${style}-${themeColor}`;
   if (lastStatusBarConfig === configKey) return;
   pendingStatusBarConfig = { theme, style, themeColor, configKey };

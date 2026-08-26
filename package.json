@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.0-native-status-scrim-test",
+  "version": "2.6.1-toolbar-safe-area-test",
   "type": "module",
   "license": "MIT",
   "scripts": {
