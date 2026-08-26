@@ -3,9 +3,30 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
-INK = (23, 23, 22, 255)
+INK = (27, 26, 24, 255)
 PAPER = (252, 250, 245, 255)
 TRANSPARENT = (0, 0, 0, 0)
+
+# Normalized 305×328 silhouette traced from the approved Quiet Editorial identity board.
+OUTER = [
+    (0.00, 0.98), (0.00, 328.00), (41.10, 326.03), (70.23, 320.95),
+    (96.30, 311.93), (114.38, 299.87), (122.38, 287.90), (124.44, 278.88),
+    (126.42, 208.61), (128.41, 206.64), (138.47, 209.67), (151.51, 217.63),
+    (171.56, 207.62), (176.59, 206.64), (178.58, 208.61), (181.63, 284.87),
+    (185.59, 293.89), (196.65, 304.96), (215.71, 314.96), (243.77, 323.00),
+    (274.88, 327.02), (305.00, 328.00), (305.00, 0.98), (267.87, 0.98),
+    (229.74, 7.05), (203.66, 18.04), (185.59, 34.11), (179.57, 45.10),
+    (176.59, 56.17), (176.59, 200.57), (153.49, 213.69), (131.46, 203.61),
+    (128.41, 200.57), (128.41, 56.17), (125.43, 45.10), (119.41, 34.11),
+    (101.34, 18.04), (75.26, 7.05), (37.13, 0.98),
+]
+
+LINE_CURVES = [
+    ((34.08, 122.34), (58.18, 116.36), (84.26, 119.39), (108.35, 130.38)),
+    ((34.08, 144.40), (58.18, 138.42), (84.26, 141.45), (108.35, 152.44)),
+    ((34.08, 166.54), (58.18, 160.47), (84.26, 163.51), (108.35, 174.50)),
+    ((34.08, 188.60), (58.18, 182.53), (84.26, 185.57), (108.35, 196.64)),
+]
 
 
 def cubic(p0, p1, p2, p3, t):
@@ -16,47 +37,41 @@ def cubic(p0, p1, p2, p3, t):
     )
 
 
-def open_book_points(size):
-    scale = size / 24
+def mark_geometry(canvas_size):
+    symbol_width = canvas_size * 0.64
+    symbol_height = symbol_width * 328 / 305
+    origin_x = (canvas_size - symbol_width) / 2
+    origin_y = (canvas_size - symbol_height) / 2
 
-    def point(x, y):
-        return (x * scale, y * scale)
+    def convert(point):
+        return (origin_x + point[0] / 305 * symbol_width, origin_y + point[1] / 328 * symbol_height)
 
-    def curve(start, control_a, control_b, end):
-        return [point(*cubic(start, control_a, control_b, end, step / 16)) for step in range(17)]
-
-    left = curve((4.5, 5.5), (7.3, 4.7), (9.7, 5.2), (12, 7))
-    left += [point(12, 20)]
-    left += curve((12, 20), (9.7, 18.2), (7.3, 16.2), (4.5, 18.5))[1:]
-    left += [point(4.5, 5.5)]
-
-    right = curve((19.5, 5.5), (16.7, 4.7), (14.3, 5.2), (12, 7))
-    right += [point(12, 20)]
-    right += curve((12, 20), (14.3, 18.2), (16.7, 16.2), (19.5, 18.5))[1:]
-    right += [point(19.5, 5.5)]
-    center = [point(12, 7), point(12, 20)]
-    return left, right, center
-
-
-def draw_open_book(draw, size, origin=(0, 0), stroke=None):
-    stroke = stroke or max(1, round(size * 0.022))
-    left, right, center = open_book_points(size)
-    ox, oy = origin
-    for points in (left, right, center):
-        shifted = [(x + ox, y + oy) for x, y in points]
-        draw.line(shifted, fill=INK, width=stroke, joint="curve")
+    outer = [convert(point) for point in OUTER]
+    lines = []
+    for curve in LINE_CURVES:
+        left = [cubic(*curve, step / 20) for step in range(21)]
+        right = [(305 - x, y) for x, y in left]
+        lines.extend([[convert(point) for point in left], [convert(point) for point in right]])
+    return outer, lines, max(1, round(canvas_size * 0.018))
 
 
 def draw_mark(size, transparent=False):
-    image = Image.new("RGBA", (size, size), TRANSPARENT if transparent else INK)
+    supersample = 4
+    canvas_size = size * supersample
+    image = Image.new("RGBA", (canvas_size, canvas_size), TRANSPARENT)
     draw = ImageDraw.Draw(image)
-    inset = round(size * 0.18)
-    radius = round(size * 0.13)
-    draw.rounded_rectangle((inset, inset, size - inset, size - inset), radius=radius, fill=PAPER)
-    book_size = size * 0.56
-    book_origin = ((size - book_size) / 2, (size - book_size) / 2)
-    draw_open_book(draw, book_size, book_origin, max(1, round(size * 0.022)))
-    return image
+    if not transparent:
+        draw.rectangle((0, 0, canvas_size, canvas_size), fill=(38, 37, 34, 255))
+    draw.rounded_rectangle(
+        (canvas_size * 0.18, canvas_size * 0.13, canvas_size * 0.82, canvas_size * 0.87),
+        radius=canvas_size * 0.13,
+        fill=PAPER,
+    )
+    outer, lines, stroke = mark_geometry(canvas_size)
+    draw.polygon(outer, fill=INK)
+    for points in lines:
+        draw.line(points, fill=PAPER, width=stroke, joint="curve")
+    return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
 for density, size in SIZES.items():
@@ -66,4 +81,4 @@ for density, size in SIZES.items():
     draw_mark(size, transparent=False).save(folder / "ic_launcher_round.png")
     draw_mark(size, transparent=True).save(folder / "ic_launcher_foreground.png")
 
-print("Generated Huush open-book launcher fallbacks:", ", ".join(f"{k}={v}px" for k, v in SIZES.items()))
+print("Generated coded Quiet Editorial butterfly/book/H launcher fallbacks:", ", ".join(f"{k}={v}px" for k, v in SIZES.items()))

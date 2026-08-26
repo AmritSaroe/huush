@@ -521,7 +521,25 @@ async function saveArticle(article) {
   return state.articles.find((item) => item.id === saved.id) || saved;
 }
 
+const HUUSH_MARK_OUTER = "M 0.00,0.98 0.00,328.00 41.10,326.03 70.23,320.95 96.30,311.93 114.38,299.87 122.38,287.90 124.44,278.88 126.42,208.61 128.41,206.64 138.47,209.67 151.51,217.63 171.56,207.62 176.59,206.64 178.58,208.61 181.63,284.87 185.59,293.89 196.65,304.96 215.71,314.96 243.77,323.00 274.88,327.02 305.00,328.00 305.00,0.98 267.87,0.98 229.74,7.05 203.66,18.04 185.59,34.11 179.57,45.10 176.59,56.17 176.59,200.57 153.49,213.69 131.46,203.61 128.41,200.57 128.41,56.17 125.43,45.10 119.41,34.11 101.34,18.04 75.26,7.05 37.13,0.98 Z";
+const HUUSH_MARK_LINES = [
+  "M 34.08,122.34 C 58.18,116.36 84.26,119.39 108.35,130.38",
+  "M 270.92,122.34 C 246.82,116.36 220.74,119.39 196.65,130.38",
+  "M 34.08,144.40 C 58.18,138.42 84.26,141.45 108.35,152.44",
+  "M 270.92,144.40 C 246.82,138.42 220.74,141.45 196.65,152.44",
+  "M 34.08,166.54 C 58.18,160.47 84.26,163.51 108.35,174.50",
+  "M 270.92,166.54 C 246.82,160.47 220.74,163.51 196.65,174.50",
+  "M 34.08,188.60 C 58.18,182.53 84.26,185.57 108.35,196.64",
+  "M 270.92,188.60 C 246.82,182.53 220.74,185.57 196.65,196.64",
+];
+
+function quietBrandSymbolMarkup(size = 20) {
+  const lineMarkup = HUUSH_MARK_LINES.map((path) => `<path d="${path}"/>`).join("");
+  return `<svg width="${size}" height="${size}" viewBox="0 0 305 328" fill="none" aria-hidden="true" focusable="false"><path d="${HUUSH_MARK_OUTER}" fill="currentColor"/><g stroke="var(--bg,#F7F0E7)" stroke-width="5.6" stroke-linecap="round">${lineMarkup}</g></svg>`;
+}
+
 function icon(name, size = 20) {
+  if (name === "book" || name === "mark") return quietBrandSymbolMarkup(size);
   const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
   const paths = {
     plus: "<path d=\"M12 5v14M5 12h14\"/>",
@@ -530,10 +548,8 @@ function icon(name, size = 20) {
     bookmark: "<path d=\"M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V22l-6-3.5L6 22V4.5Z\"/>",
     copy: "<rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"2\"/><path d=\"M5 15V5a1 1 0 0 1 1-1h10\"/>",
     share: "<circle cx=\"18\" cy=\"5\" r=\"2\"/><circle cx=\"6\" cy=\"12\" r=\"2\"/><circle cx=\"18\" cy=\"19\" r=\"2\"/><path d=\"m8 11 8-5M8 13l8 5\"/>",
-    book: "<path d=\"M4.5 5.5c2.8-.8 5.2-.3 7.5 1.5v13c-2.3-1.8-4.7-2.3-7.5-1.5v-13Z\"/><path d=\"M19.5 5.5c-2.8-.8-5.2-.3-7.5 1.5v13c2.3-1.8 4.7-2.3 7.5-1.5v-13Z\"/><path d=\"M12 7v13\"/>",
     terminal: "<path d=\"m5 7 4 5-4 5M12 17h7\"/>",
     search: "<circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4.5 4.5\"/>",
-    mark: "<path d=\"M4.5 5.5c2.8-.8 5.2-.3 7.5 1.5v13c-2.3-1.8-4.7-2.3-7.5-1.5v-13Z\"/><path d=\"M19.5 5.5c-2.8-.8-5.2-.3-7.5 1.5v13c2.3-1.8 4.7-2.3 7.5-1.5v-13Z\"/><path d=\"M12 7v13\"/>",
     home: "<path d=\"m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z\"/>",
     archive: "<path d=\"M4 6h16v14H4z\"/><path d=\"M3 3h18v3H3zM9 11h6\"/>",
     tag: "<path d=\"m20 13-7 7-9-9V4h7l9 9Z\"/><circle cx=\"8.5\" cy=\"8.5\" r=\"1.2\" fill=\"currentColor\" stroke=\"none\"/>",
@@ -549,7 +565,8 @@ function icon(name, size = 20) {
 }
 
 function quietMarkMarkup() {
-  return `<svg class="quiet-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="6" width="50" height="52" rx="11" fill="var(--mark-paper,#FCFAF5)"/><g transform="translate(9.5 9.5) scale(1.88)" fill="none" stroke="var(--mark-ink,#1B1A18)" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"><path d="M4.5 5.5c2.8-.8 5.2-.3 7.5 1.5v13c-2.3-1.8-4.7-2.3-7.5-1.5v-13Z"/><path d="M19.5 5.5c-2.8-.8-5.2-.3-7.5 1.5v13c2.3-1.8 4.7-2.3 7.5-1.5v-13Z"/><path d="M12 7v13"/></g></svg>`;
+  const lineMarkup = HUUSH_MARK_LINES.map((path) => `<path d="${path}"/>`).join("");
+  return `<svg class="quiet-mark quiet-mark--editorial" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="7" y="6" width="50" height="52" rx="11" fill="var(--mark-paper,#FCFAF5)"/><g transform="translate(11 9) scale(.138)" fill="var(--mark-ink,#1B1A18)"><path d="${HUUSH_MARK_OUTER}"/><g fill="none" stroke="var(--mark-paper,#FCFAF5)" stroke-width="5.6" stroke-linecap="round">${lineMarkup}</g></g></svg>`;
 }
 
 function logoMarkup(compact = false) {

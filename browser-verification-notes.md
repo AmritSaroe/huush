@@ -39,3 +39,6 @@ Final combined verification — Settings: the live Vite app renders zero Setting
 
 
 Library branding placement fix: the live Vite app now renders one compact `.editorial-topbar__brand` in the Library header, zero `.library-lockup` content blocks, the retained `Worth keeping.` kicker, one search control, and Library/Tags/Settings navigation. The rendered screenshot shows the brand aligned at the upper-left with search at the opposite top corner.
+
+
+Quiet Editorial coded-logo verification: the live app renders one top-corner brand with an inline SVG and no `<img>` logo. The brand symbol contains the shared outer vector path plus eight internal page-line paths (four per side), and the Library navigation book uses the same coded geometry. The content lockup remains removed and navigation labels remain Library/Tags/Settings. The highest-density Android fallback was visually checked and shows the centered solid twin-page mark with cream lines.
