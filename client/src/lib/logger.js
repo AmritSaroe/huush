@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
-export const APP_VERSION = "2.5.6-linked-reader-test";
+export const APP_VERSION = "2.5.7-reader-toolbar-test";
 const STORAGE_KEY = "huush_events";
 const LEGACY_STORAGE_KEY = "whitemint:logs";
 const ENABLED_KEY = "huush_logging_enabled";
