@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.4-reader-performance",
+  "version": "2.6.5-content-cleanup",
   "type": "module",
   "license": "MIT",
   "scripts": {

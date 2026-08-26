@@ -11,8 +11,28 @@ const PURIFY_CONFIG = {
   FORBID_ATTR: ["style", "class", "id", "srcdoc"],
 };
 
+const PROMOTIONAL_CLASS_RE = /(?:newsletter|subscribe|subscription|promo|promotion|advert|advertisement|sponsor|recommended|related|social[-_]?share|share[-_]?tools|follow[-_]?us)/i;
+const PROMOTIONAL_TEXT_RE = /\b(?:subscribe|sign\s*up|join\s+(?:our|the)|get\s+(?:our|the)|stay\s+(?:updated|up\s+to\s+date)|follow\s+us)\b/i;
+const UTILITY_IMAGE_RE = /(?:favicon|apple[-_]?touch[-_]?icon|touch[-_]?icon|site[-_]?icon|avatar|profile[-_]?photo|profile[-_]?image|emoji)/i;
+
 function removeUnsafeNodes(root) {
   root.querySelectorAll("script, style, iframe, object, embed, form, input, button, textarea, select, option, svg, canvas, meta, link, base, noscript").forEach((node) => node.remove());
+}
+
+function removePromotionalNodes(root) {
+  root.querySelectorAll("aside, footer, [class], [id]").forEach((node) => {
+    const hint = `${node.tagName} ${node.getAttribute("class") || ""} ${node.id || ""}`;
+    if (PROMOTIONAL_CLASS_RE.test(hint)) node.remove();
+  });
+
+  [...root.querySelectorAll("p, div, section, aside, footer")].forEach((node) => {
+    if (!node.parentNode) return;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length > 320 || !PROMOTIONAL_TEXT_RE.test(text)) return;
+    const ancestor = node.closest("div, section, aside, footer");
+    const container = ancestor && ancestor !== root ? ancestor : node;
+    if ((container.textContent || "").trim().length <= 380) container.remove();
+  });
 }
 
 function resolveImageCandidate(image, baseUrl) {
@@ -33,6 +53,14 @@ function resolveImageCandidate(image, baseUrl) {
   }
 }
 
+function isUtilityImage(image, resolvedUrl) {
+  const hint = `${resolvedUrl} ${image.getAttribute("alt") || ""} ${image.getAttribute("title") || ""}`;
+  if (UTILITY_IMAGE_RE.test(hint)) return true;
+  const width = Number(image.getAttribute("width"));
+  const height = Number(image.getAttribute("height"));
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && width <= 64 && height <= 64;
+}
+
 /** Sanitize stored article HTML while preserving usable image URLs. */
 export function sanitizeContent(html = "", baseUrl = "", heroFallback = "") {
   if (baseUrl && typeof baseUrl === "object") {
@@ -43,11 +71,12 @@ export function sanitizeContent(html = "", baseUrl = "", heroFallback = "") {
   const container = document.createElement("div");
   container.innerHTML = String(html || "");
   removeUnsafeNodes(container);
+  removePromotionalNodes(container);
 
   const seenImageIdentities = new Set();
   container.querySelectorAll("img").forEach((image) => {
     const src = resolveImageCandidate(image, baseUrl);
-    if (!src) {
+    if (!src || isUtilityImage(image, src)) {
       image.remove();
       return;
     }
@@ -70,6 +99,9 @@ export function sanitizeContent(html = "", baseUrl = "", heroFallback = "") {
     const figure = picture.closest("figure");
     if (figure && !figure.querySelector("img")) figure.remove();
     else picture.remove();
+  });
+  container.querySelectorAll("figure").forEach((figure) => {
+    if (!figure.querySelector("img") && !figure.textContent.trim()) figure.remove();
   });
 
   container.querySelectorAll("*").forEach((element) => {
