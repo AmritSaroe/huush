@@ -18,6 +18,9 @@ const config: CapacitorConfig = {
     CapacitorHttp: {
       enabled: true,
     },
+    StatusBar: {
+      insetsHandling: "css",
+    },
   },
 };
 

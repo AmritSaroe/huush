@@ -38,15 +38,13 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();
-        // Use the traditional non-overlay layout so Android can render an actual
-        // status-bar surface. This is supported while Huush targets SDK 34.
-        WindowCompat.setDecorFitsSystemWindows(window, true);
+        // Android 16 enforces edge-to-edge for target SDK 36. Let system bars
+        // remain transparent and apply their insets through Capacitor's CSS mode.
+        WindowCompat.enableEdgeToEdge(window);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setBackgroundDrawableResource(R.color.huush_surface_light);
-        window.setStatusBarColor(Color.parseColor("#F6F1E8"));
-        window.setNavigationBarColor(Color.parseColor("#F6F1E8"));
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.setNavigationBarDividerColor(Color.parseColor("#F6F1E8"));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.setNavigationBarContrastEnforced(false);
         }
 
         WebView webView = getBridge() == null ? null : getBridge().getWebView();
@@ -112,9 +110,9 @@ public class MainActivity extends BridgeActivity {
                 : 1f;
             String script = String.format(
                 Locale.US,
-                // The WebView is below system bars in this mode, so safe-area
-                // padding must not be applied a second time. Keep the IME value
-                // available for the keyboard-safe bottom sheet fallback.
+                // Capacitor 8 owns system-bar CSS insets. Keep the IME value
+                // available for the keyboard-safe bottom sheet fallback without
+                // injecting a second top/bottom system-bar inset.
                 "document.documentElement.style.setProperty('--wm-native-safe-top','0px');" +
                     "document.documentElement.style.setProperty('--wm-native-safe-right','0px');" +
                     "document.documentElement.style.setProperty('--wm-native-safe-bottom','0px');" +
