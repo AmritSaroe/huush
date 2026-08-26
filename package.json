@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.6-load-timing-diagnostic",
+  "version": "2.6.7-reader-scroll-stability",
   "type": "module",
   "license": "MIT",
   "scripts": {

@@ -459,6 +459,7 @@ function syncReaderToolbar() {
 
 function setReaderToolbarHidden(next) {
   const toolbar = document.querySelector(".reader-toolbar");
+  if (state.readerToolbarHidden === next) return;
   if (next && toolbar?.contains(document.activeElement)) return;
   const changed = state.readerToolbarHidden !== next;
   state.readerToolbarHidden = next;
