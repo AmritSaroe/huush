@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.18-selection-diagnostics",
+  "version": "2.6.19-action-overlay",
   "type": "module",
   "license": "MIT",
   "scripts": {

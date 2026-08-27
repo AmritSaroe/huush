@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
-export const APP_VERSION = "2.6.18-selection-diagnostics";
+export const APP_VERSION = "2.6.19-action-overlay";
 const STORAGE_KEY = "huush_events";
 const LEGACY_STORAGE_KEY = "whitemint:logs";
 const ENABLED_KEY = "huush_logging_enabled";
