@@ -1119,7 +1119,20 @@ function resetSwipeGesture() {
   swipeGesture.active = false;
 }
 
+function captureNativeSelectionDiagnostics() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const raw = window.HuushStartup?.getSelectionDiagnostics?.();
+    if (!raw) return;
+    const detail = JSON.parse(raw);
+    logger.log("android.selection.snapshot", detail);
+  } catch (error) {
+    logger.log("android.selection.snapshot.failed", { message: error?.message || String(error) }, "warn");
+  }
+}
+
 function buildLogExport() {
+  captureNativeSelectionDiagnostics();
   return JSON.stringify(logger.export(), null, 2);
 }
 
