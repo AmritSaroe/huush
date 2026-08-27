@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.24-custom-selection-toolbar",
+  "version": "2.6.25-native-toolbar",
   "type": "module",
   "license": "MIT",
   "scripts": {

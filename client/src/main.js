@@ -357,10 +357,6 @@ function applySettings() {
     article.dataset.readingFont = state.settings.font;
   }
   syncNativeStatusBar();
-  if (Capacitor.isNativePlatform()) {
-    try { window.HuushTheme?.setReaderTheme?.(theme); }
-    catch { /* native bridge may be unavailable in a browser preview */ }
-  }
 }
 
 function syncPreferenceControls() {
