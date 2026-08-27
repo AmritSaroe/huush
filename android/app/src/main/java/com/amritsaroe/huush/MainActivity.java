@@ -29,6 +29,7 @@ public class MainActivity extends BridgeActivity {
     private boolean reportedFullyDrawn = false;
     private long startupStartedAt;
     private volatile int currentActionModeStyleRes = R.style.ActionModeOverlay_Light;
+    private HuushFloatingActionMode activeFloatingActionMode;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,8 +55,31 @@ public class MainActivity extends BridgeActivity {
 
                 @Override
                 public ActionMode onWindowStartingActionMode(ActionMode.Callback callback, int type) {
-                    getTheme().applyStyle(currentActionModeStyleRes, true);
-                    return super.onWindowStartingActionMode(callback, type);
+                    if (type != ActionMode.TYPE_FLOATING) {
+                        getTheme().applyStyle(currentActionModeStyleRes, true);
+                        return super.onWindowStartingActionMode(callback, type);
+                    }
+                    WebView webView = getBridge() == null ? null : getBridge().getWebView();
+                    if (webView == null) {
+                        getTheme().applyStyle(currentActionModeStyleRes, true);
+                        return super.onWindowStartingActionMode(callback, type);
+                    }
+                    if (activeFloatingActionMode != null) activeFloatingActionMode.finish();
+                    HuushFloatingActionMode actionMode = new HuushFloatingActionMode(
+                        MainActivity.this,
+                        webView,
+                        callback,
+                        actionModeSurfaceColor(),
+                        actionModeContentColor());
+                    if (!actionMode.start()) return null;
+                    activeFloatingActionMode = actionMode;
+                    return actionMode;
+                }
+
+                @Override
+                public void onActionModeFinished(ActionMode mode) {
+                    super.onActionModeFinished(mode);
+                    if (mode == activeFloatingActionMode) activeFloatingActionMode = null;
                 }
             });
         }
@@ -83,6 +107,18 @@ public class MainActivity extends BridgeActivity {
         );
 
         bridgeInsetsToWebView();
+    }
+
+    private int actionModeSurfaceColor() {
+        if (currentActionModeStyleRes == R.style.ActionModeOverlay_Dark) return Color.parseColor("#171716");
+        if (currentActionModeStyleRes == R.style.ActionModeOverlay_Sepia) return Color.parseColor("#EEE2CB");
+        return Color.parseColor("#F6F1E8");
+    }
+
+    private int actionModeContentColor() {
+        return currentActionModeStyleRes == R.style.ActionModeOverlay_Dark
+            ? Color.parseColor("#F6F1E8")
+            : Color.parseColor("#171716");
     }
 
     private final class ReaderThemeBridge {

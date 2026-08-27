@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
-export const APP_VERSION = "2.6.23-native-action-mode-theme";
+export const APP_VERSION = "2.6.24-custom-selection-toolbar";
 const STORAGE_KEY = "huush_events";
 const LEGACY_STORAGE_KEY = "whitemint:logs";
 const ENABLED_KEY = "huush_logging_enabled";

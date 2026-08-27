@@ -553,6 +553,7 @@ function handleReaderScroll(surface) {
 }
 
 function setFocusMode(next) {
+  if (next && document.activeElement instanceof HTMLElement) document.activeElement.blur();
   state.focusMode = next;
   syncFocusMode();
   setReaderToolbarHidden(next);
@@ -1578,10 +1579,10 @@ async function handleAction(target) {
   if (action === "close-reader-menu") { closeVisibleSheet(() => { state.readerMenuOpen = false; renderReaderSheet(); }); return; }
   if (action === "open-reader-theme") { state.readerThemeOpen = true; state.readerMenuOpen = false; renderReaderSheet(); return; }
   if (action === "close-reader-theme") { closeVisibleSheet(() => { state.readerThemeOpen = false; renderReaderSheet(); }); return; }
-  if (action === "toggle-focus") { state.readerMenuOpen = false; setFocusMode(!state.focusMode); render(); return; }
+  if (action === "toggle-focus") { state.readerMenuOpen = false; setFocusMode(!state.focusMode); renderReaderSheet(); return; }
   if (action === "share-article" && state.article) {
     state.readerMenuOpen = false;
-    render();
+    renderReaderSheet();
     await shareCurrentArticle();
     return;
   }
@@ -1692,7 +1693,7 @@ async function handleAction(target) {
   }
   if (action === "copy-source" && state.article) {
     state.readerMenuOpen = false;
-    render();
+    renderReaderSheet();
     try {
       await copyText(state.article.url);
       log("source.copied", safeUrlForLog(state.article.url));
