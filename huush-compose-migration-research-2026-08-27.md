@@ -39,3 +39,16 @@ The `xayn_readability` project is an Apache-2.0 native Dart port of Mozilla Read
 [18]: https://pub.dev/packages/reader_mode — `reader_mode` Dart port of Mozilla Readability.
 [19]: https://pub.dev/packages/readability — Flutter FFI wrapper around Go Readability.
 [20]: https://github.com/xaynetwork/xayn_readability — Xayn native Dart Readability port.
+
+## Expo + React Native direction
+
+Expo Router is officially documented as a file-based router for React Native and Web, with shared routes, deep links, static web rendering, and platform-specific APIs when needed. Expo recommends starting with `create-expo-app` and moving from Expo Go to a development build when native libraries or native configuration are required. [21] [22]
+
+Expo’s official development-build documentation describes a development build as the project’s own version of Expo Go, allowing native libraries and native configuration. It also states that native directories need rebuilding after installing native-code libraries, changing app configuration, or upgrading the Expo SDK. [23]
+
+React Native’s official New Architecture documentation states that the New Architecture has been enabled by default in new projects since React Native 0.76 and provides concurrent rendering, automatic batching, JSI-based native interop, and synchronous layout effects. It also cautions that enabling the architecture alone does not guarantee a user-visible performance improvement; app code and libraries must use the relevant capabilities. [24]
+
+[21]: https://docs.expo.dev/router/introduction/ — Expo Router introduction.
+[22]: https://docs.expo.dev/router/basics/navigation/ — Expo Router navigation and deep-linking.
+[23]: https://docs.expo.dev/develop/development-builds/introduction/ — Expo development builds.
+[24]: https://reactnative.dev/architecture/landing-page — React Native New Architecture.
