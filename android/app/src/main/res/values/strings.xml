@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">huush</string>
-    <string name="title_activity_main">huush</string>
-    <string name="package_name">com.amritsaroe.huush</string>
-    <string name="custom_url_scheme">com.amritsaroe.huush</string>
-</resources>
