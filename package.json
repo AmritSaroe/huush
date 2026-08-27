@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.26-native-toolbar-rollback",
+  "version": "2.6.27-statusbar-contrast",
   "type": "module",
   "license": "MIT",
   "scripts": {
