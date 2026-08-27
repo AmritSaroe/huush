@@ -110,7 +110,6 @@ let nativeStatusBarStyle = "";
 let lastStatusBarConfig = "";
 let pendingStatusBarConfig = null;
 let nativeStatusBarSyncPromise = null;
-let nativeReaderTheme = "";
 let settingsInteractionUnlockTimeout = 0;
 let screenEnteredAt = Date.now();
 let lastPauseAt = 0;
@@ -323,20 +322,6 @@ function effectiveTheme() {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function syncNativeReaderTheme() {
-  if (!Capacitor.isNativePlatform()) return;
-  const bridge = window.HuushStartup;
-  if (typeof bridge?.setReaderTheme !== "function") return;
-  const theme = effectiveTheme();
-  const nativeTheme = state.settings.theme === "system" ? "system" : theme;
-  if (nativeReaderTheme === nativeTheme) return;
-  try {
-    bridge.setReaderTheme(nativeTheme);
-    nativeReaderTheme = nativeTheme;
-  } catch {
-    nativeReaderTheme = "";
-  }
-}
 
 function themeLabel(theme = state.settings.theme) {
   return theme === "system" ? `System (${effectiveTheme() === "dark" ? "dark" : "light"})` : theme[0].toUpperCase() + theme.slice(1);
@@ -372,7 +357,6 @@ function applySettings() {
     article.dataset.readingFont = state.settings.font;
   }
   syncNativeStatusBar();
-  syncNativeReaderTheme();
 }
 
 function syncPreferenceControls() {
@@ -1119,20 +1103,7 @@ function resetSwipeGesture() {
   swipeGesture.active = false;
 }
 
-function captureNativeSelectionDiagnostics() {
-  if (!Capacitor.isNativePlatform()) return;
-  try {
-    const raw = window.HuushStartup?.getSelectionDiagnostics?.();
-    if (!raw) return;
-    const detail = JSON.parse(raw);
-    logger.log("android.selection.snapshot", detail);
-  } catch (error) {
-    logger.log("android.selection.snapshot.failed", { message: error?.message || String(error) }, "warn");
-  }
-}
-
 function buildLogExport() {
-  captureNativeSelectionDiagnostics();
   return JSON.stringify(logger.export(), null, 2);
 }
 

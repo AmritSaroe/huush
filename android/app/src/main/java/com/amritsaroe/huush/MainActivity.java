@@ -1,16 +1,11 @@
 package com.amritsaroe.huush;
 
-import android.app.UiModeManager;
-import android.content.res.Configuration;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.view.ActionMode;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
@@ -32,11 +27,6 @@ public class MainActivity extends BridgeActivity {
     private volatile boolean readinessRequested = false;
     private boolean reportedFullyDrawn = false;
     private long startupStartedAt;
-    private int appliedApplicationNightMode = -1;
-    private int selectionActionModeStarts = 0;
-    private int selectionActionModeFinishes = 0;
-    private String lastSelectionActionModeClass = "";
-    private long lastSelectionActionModeAt = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,82 +66,7 @@ public class MainActivity extends BridgeActivity {
         bridgeInsetsToWebView();
     }
 
-    private void applyApplicationNightMode(String theme) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
-        int mode = "dark".equals(theme)
-            ? UiModeManager.MODE_NIGHT_YES
-            : "system".equals(theme)
-                ? UiModeManager.MODE_NIGHT_AUTO
-                : UiModeManager.MODE_NIGHT_NO;
-        if (appliedApplicationNightMode == mode) return;
-        UiModeManager uiModeManager = getSystemService(UiModeManager.class);
-        if (uiModeManager == null) return;
-        try {
-            uiModeManager.setApplicationNightMode(mode);
-            appliedApplicationNightMode = mode;
-        } catch (RuntimeException ignored) {
-            // The WebView keeps its normal platform selection behavior if the
-            // app-local night-mode service is unavailable or rejects the request.
-        }
-    }
-
-    private void applyReaderTheme(String theme) {
-        applyApplicationNightMode(theme);
-    }
-
-    @Override
-    public void onActionModeStarted(ActionMode mode) {
-        super.onActionModeStarted(mode);
-        selectionActionModeStarts++;
-        lastSelectionActionModeClass = mode == null ? "" : mode.getClass().getName();
-        lastSelectionActionModeAt = SystemClock.uptimeMillis();
-        Log.i("HuushSelection", "action-mode-started class=" + lastSelectionActionModeClass
-            + " starts=" + selectionActionModeStarts);
-    }
-
-    @Override
-    public void onActionModeFinished(ActionMode mode) {
-        super.onActionModeFinished(mode);
-        selectionActionModeFinishes++;
-        lastSelectionActionModeAt = SystemClock.uptimeMillis();
-        Log.i("HuushSelection", "action-mode-finished finishes=" + selectionActionModeFinishes);
-    }
-
-    private String selectionDiagnosticsJson() {
-        int uiMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        int dialogCornerRadiusPx = -1;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            android.content.res.TypedArray attributes = getTheme().obtainStyledAttributes(
-                new int[] { android.R.attr.dialogCornerRadius }
-            );
-            dialogCornerRadiusPx = attributes.getDimensionPixelSize(0, -1);
-            attributes.recycle();
-        }
-        return "{"
-            + "\"sdk\":" + Build.VERSION.SDK_INT
-            + ",\"uiModeNightMask\":" + uiMode
-            + ",\"appliedApplicationNightMode\":" + appliedApplicationNightMode
-            + ",\"dialogCornerRadiusPx\":" + dialogCornerRadiusPx
-            + ",\"selectionActionModeStarts\":" + selectionActionModeStarts
-            + ",\"selectionActionModeFinishes\":" + selectionActionModeFinishes
-            + ",\"lastSelectionActionModeClass\":\""
-            + lastSelectionActionModeClass.replace("\"", "'")
-            + "\",\"windowActionModeOverlay\":"
-            + getWindow().hasFeature(Window.FEATURE_ACTION_MODE_OVERLAY)
-            + "}";
-    }
-
     private final class StartupBridge {
-        @JavascriptInterface
-        public void setReaderTheme(String theme) {
-            runOnUiThread(() -> applyReaderTheme(theme));
-        }
-
-        @JavascriptInterface
-        public String getSelectionDiagnostics() {
-            return selectionDiagnosticsJson();
-        }
-
         @JavascriptInterface
         public void markReady() {
             if (readinessRequested) return;
