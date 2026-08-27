@@ -922,6 +922,16 @@ function toastMarkup() {
   return `<div class="toast toast--${state.toast.type}" role="status"><span>${state.toast.type === "error" ? "!" : "✓"}</span><p>${escapeHtml(state.toast.message)}</p>${state.toast.action ? `<button class="toast__action" data-action="${state.toast.action}">Undo</button>` : ""}<button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>`;
 }
 
+function renderReaderSheet() {
+  const container = document.querySelector("#reader-sheet-root");
+  if (!container) {
+    // The article may have been opened during this tick; keep state and DOM aligned.
+    render();
+    return;
+  }
+  container.innerHTML = state.article ? readerMenuMarkup() : "";
+}
+
 function render() {
   const root = document.querySelector("#root");
   const currentSettingsScreen = root.querySelector(".settings-screen");
@@ -931,7 +941,7 @@ function render() {
   const useNativeViewTransition = Boolean(transition && document.startViewTransition && !reducedMotionPreferred());
   const update = () => {
     const shellClass = transition && !useNativeViewTransition ? ` app-shell--view-${transition}` : "";
-    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : (state.linkedArticleLoading || state.linkedArticleError) ? linkedReaderStateMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${state.confirmCollectionDelete ? collectionDeleteConfirmMarkup() : ""}${state.confirmClearLogs ? clearLogsConfirmMarkup() : ""}${state.article ? readerMenuMarkup() : ""}${toastMarkup()}</div>`;
+    root.innerHTML = `<div class="app-shell${shellClass}">${state.logViewerOpen ? logViewerMarkup() : (state.linkedArticleLoading || state.linkedArticleError) ? linkedReaderStateMarkup() : state.article ? readerMarkup() : state.activeTab === "settings" ? settingsPageMarkup() : state.activeTab === "tags" ? tagsPageMarkup() : libraryMarkup()}${state.logViewerOpen || state.article || state.activeTab === "library" ? "" : captureMarkup()}${state.collectionSheet?.type === "manage" ? collectionManagementMarkup() : state.collectionSheet?.type === "new" ? `<div class="sheet-backdrop" data-action="close-collection-sheet"></div><section class="collection-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><header class="sheet-header"><div><p>New collection</p><h2>Name your folder.</h2></div><button class="sheet-close" data-action="close-collection-sheet">Done</button></header><label class="collection-name-label">Collection name<input data-collection-name maxlength="60" placeholder="e.g. Weekend reads" /></label><button class="collection-save" data-action="create-collection">Create collection</button></section>` : state.collectionSheet?.type === "organize" ? organizeMarkup(state.articles.find((item) => item.id === state.collectionSheet.articleId) || state.article) : ""}${state.confirmCollectionDelete ? collectionDeleteConfirmMarkup() : ""}${state.confirmClearLogs ? clearLogsConfirmMarkup() : ""}<div id="reader-sheet-root">${state.article ? readerMenuMarkup() : ""}</div>${toastMarkup()}</div>`;
     applySettings();
     if (transition) {
       const nextShell = root.querySelector(".app-shell");
@@ -1316,8 +1326,8 @@ function navigateBack() {
     render();
     return true;
   }
-  if (state.readerThemeOpen) { closeVisibleSheet(() => { state.readerThemeOpen = false; render(); }); return true; }
-  if (state.readerMenuOpen) { closeVisibleSheet(() => { state.readerMenuOpen = false; render(); }); return true; }
+  if (state.readerThemeOpen) { closeVisibleSheet(() => { state.readerThemeOpen = false; renderReaderSheet(); }); return true; }
+  if (state.readerMenuOpen) { closeVisibleSheet(() => { state.readerMenuOpen = false; renderReaderSheet(); }); return true; }
   if (state.confirmCollectionDelete) { state.confirmCollectionDelete = null; render(); return true; }
   if (state.confirmClearLogs) { state.confirmClearLogs = false; render(); return true; }
   if (state.confirmClear) { state.confirmClear = false; render(); return true; }
@@ -1560,10 +1570,10 @@ async function handleAction(target) {
     closeVisibleSheet(() => { state.settingsOpen = false; render(); });
     return;
   }
-  if (action === "open-reader-menu") { state.readerMenuOpen = true; state.readerThemeOpen = false; render(); return; }
-  if (action === "close-reader-menu") { closeVisibleSheet(() => { state.readerMenuOpen = false; render(); }); return; }
-  if (action === "open-reader-theme") { state.readerThemeOpen = true; state.readerMenuOpen = false; render(); return; }
-  if (action === "close-reader-theme") { closeVisibleSheet(() => { state.readerThemeOpen = false; render(); }); return; }
+  if (action === "open-reader-menu") { state.readerMenuOpen = true; state.readerThemeOpen = false; renderReaderSheet(); return; }
+  if (action === "close-reader-menu") { closeVisibleSheet(() => { state.readerMenuOpen = false; renderReaderSheet(); }); return; }
+  if (action === "open-reader-theme") { state.readerThemeOpen = true; state.readerMenuOpen = false; renderReaderSheet(); return; }
+  if (action === "close-reader-theme") { closeVisibleSheet(() => { state.readerThemeOpen = false; renderReaderSheet(); }); return; }
   if (action === "toggle-focus") { state.readerMenuOpen = false; setFocusMode(!state.focusMode); render(); return; }
   if (action === "share-article" && state.article) {
     state.readerMenuOpen = false;
@@ -1605,7 +1615,7 @@ async function handleAction(target) {
     const closeReaderTheme = state.readerThemeOpen;
     state.readerThemeOpen = false;
     await persistSettings();
-    if (closeReaderTheme) render();
+    if (closeReaderTheme) renderReaderSheet();
     return;
   }
   if (action === "toggle-theme") {
