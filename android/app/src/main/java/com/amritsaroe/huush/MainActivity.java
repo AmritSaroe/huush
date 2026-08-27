@@ -1,6 +1,8 @@
 package com.amritsaroe.huush;
 
+import android.app.UiModeManager;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
@@ -28,6 +30,7 @@ public class MainActivity extends BridgeActivity {
     private boolean reportedFullyDrawn = false;
     private long startupStartedAt;
     private int appliedReaderThemeStyle = 0;
+    private int appliedApplicationNightMode = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +40,7 @@ public class MainActivity extends BridgeActivity {
         startupStartedAt = SystemClock.uptimeMillis();
 
         super.onCreate(savedInstanceState);
-        applyReaderTheme("light");
+        applyReaderThemeOverlay("light");
 
         Window window = getWindow();
         // Android 16 enforces edge-to-edge for target SDK 36. Let system bars
@@ -68,7 +71,7 @@ public class MainActivity extends BridgeActivity {
         bridgeInsetsToWebView();
     }
 
-    private void applyReaderTheme(String theme) {
+    private void applyReaderThemeOverlay(String theme) {
         int style = "dark".equals(theme)
             ? R.style.HuushReaderTheme_Dark
             : "sepia".equals(theme)
@@ -77,6 +80,30 @@ public class MainActivity extends BridgeActivity {
         if (appliedReaderThemeStyle == style) return;
         getTheme().applyStyle(style, true);
         appliedReaderThemeStyle = style;
+    }
+
+    private void applyApplicationNightMode(String theme) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        int mode = "dark".equals(theme)
+            ? UiModeManager.MODE_NIGHT_YES
+            : "system".equals(theme)
+                ? UiModeManager.MODE_NIGHT_AUTO
+                : UiModeManager.MODE_NIGHT_NO;
+        if (appliedApplicationNightMode == mode) return;
+        UiModeManager uiModeManager = getSystemService(UiModeManager.class);
+        if (uiModeManager == null) return;
+        try {
+            uiModeManager.setApplicationNightMode(mode);
+            appliedApplicationNightMode = mode;
+        } catch (RuntimeException ignored) {
+            // Keep the AppCompat/action-mode overlay fallback if the platform
+            // service is unavailable or rejects the app-local mode request.
+        }
+    }
+
+    private void applyReaderTheme(String theme) {
+        applyReaderThemeOverlay(theme);
+        applyApplicationNightMode(theme);
     }
 
     private final class StartupBridge {

@@ -328,10 +328,11 @@ function syncNativeReaderTheme() {
   const bridge = window.HuushStartup;
   if (typeof bridge?.setReaderTheme !== "function") return;
   const theme = effectiveTheme();
-  if (nativeReaderTheme === theme) return;
+  const nativeTheme = state.settings.theme === "system" ? "system" : theme;
+  if (nativeReaderTheme === nativeTheme) return;
   try {
-    bridge.setReaderTheme(theme);
-    nativeReaderTheme = theme;
+    bridge.setReaderTheme(nativeTheme);
+    nativeReaderTheme = nativeTheme;
   } catch {
     nativeReaderTheme = "";
   }
