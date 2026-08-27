@@ -77,47 +77,24 @@ class ArticleRepository(private val context: Context) {
     suspend fun fetchPublicArticle(rawUrl: String): Result<Article> = withContext(Dispatchers.IO) {
         runCatching {
             val url = normalizeUrl(rawUrl)
-            val document = Jsoup.connect(url)
+            val html = Jsoup.connect(url)
                 .userAgent("Huush/0.1 (+public article reader)")
                 .referrer("https://www.google.com/")
                 .timeout(15_000)
                 .followRedirects(true)
                 .get()
-
-            val title = sequenceOf(
-                document.selectFirst("meta[property=og:title]")?.attr("content"),
-                document.selectFirst("meta[name=twitter:title]")?.attr("content"),
-                document.selectFirst("h1")?.text(),
-                document.title(),
-            ).mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }.firstOrNull()
-                ?: "Untitled article"
-
-            val root = document.selectFirst("article")
-                ?: document.selectFirst("main")
-                ?: document.body()
-                ?: error("The page has no readable body")
-
-            root.select("script,style,noscript,template,form,nav,header,footer,aside,iframe,button,dialog").remove()
-            val blocks = root.select("p,h2,h3,blockquote,li")
-                .map { it.text().replace(Regex("\\s+"), " ").trim() }
-                .filter { it.length >= 24 }
-                .distinct()
-            val paragraphs = if (blocks.isNotEmpty()) blocks else root.text()
-                .split(Regex("(?<=[.!?])\\s{2,}"))
-                .map(String::trim)
-                .filter { it.length >= 24 }
-
-            val characterCount = paragraphs.sumOf(String::length)
-            val previewOnly = paragraphs.size < 3 || characterCount < 1200
+                .outerHtml()
+            val extracted = NativeReadabilityExtractor.extract(url, html)
+                ?: error("Could not extract readable public content from this page.")
             val source = sourceName(Uri.parse(url).host.orEmpty())
             Article(
                 id = url,
-                title = title,
+                title = extracted.title,
                 source = source,
                 url = url,
-                summary = paragraphs.take(2).joinToString(" ").take(360),
-                paragraphs = paragraphs,
-                previewOnly = previewOnly,
+                summary = extracted.excerpt,
+                paragraphs = extracted.paragraphs,
+                previewOnly = extracted.previewOnly,
             )
         }
     }
