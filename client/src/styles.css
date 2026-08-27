@@ -882,10 +882,22 @@ body,
 .article-reading__meta,
 .reading-preview-card__sample{
   transition:
-    font-family var(--duration-slow) var(--ease-ios-decel),
-    font-size var(--duration-fast) var(--ease-ios-standard),
     background-color var(--duration-normal) var(--ease-ios-standard),
     color var(--duration-normal) var(--ease-ios-standard);
+}
+
+/* Keep native WebView selection anchored to stable article metrics. */
+.article-reading__body{
+  -webkit-user-select:text;
+  user-select:text;
+}
+.reader-toolbar,
+.bottom-navigation,
+.sheet-header,
+.toast,
+.article-reading__footer{
+  -webkit-user-select:none;
+  user-select:none;
 }
 svg,svg *{transition:fill var(--duration-normal) var(--ease-ios-standard),stroke var(--duration-normal) var(--ease-ios-standard);}
 

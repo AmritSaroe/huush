@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.20-selection-baseline",
+  "version": "2.6.21-selection-css-stability",
   "type": "module",
   "license": "MIT",
   "scripts": {
