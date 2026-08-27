@@ -1,6 +1,6 @@
 {
   "name": "huush",
-  "version": "2.6.15-selection-bar",
+  "version": "2.6.16-selection-overlay",
   "type": "module",
   "license": "MIT",
   "scripts": {
