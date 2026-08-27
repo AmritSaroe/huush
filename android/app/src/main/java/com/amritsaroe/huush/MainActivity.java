@@ -27,6 +27,7 @@ public class MainActivity extends BridgeActivity {
     private volatile boolean readinessRequested = false;
     private boolean reportedFullyDrawn = false;
     private long startupStartedAt;
+    private int appliedReaderThemeStyle = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,6 +37,7 @@ public class MainActivity extends BridgeActivity {
         startupStartedAt = SystemClock.uptimeMillis();
 
         super.onCreate(savedInstanceState);
+        applyReaderTheme("light");
 
         Window window = getWindow();
         // Android 16 enforces edge-to-edge for target SDK 36. Let system bars
@@ -66,7 +68,23 @@ public class MainActivity extends BridgeActivity {
         bridgeInsetsToWebView();
     }
 
+    private void applyReaderTheme(String theme) {
+        int style = "dark".equals(theme)
+            ? R.style.HuushReaderTheme_Dark
+            : "sepia".equals(theme)
+                ? R.style.HuushReaderTheme_Sepia
+                : R.style.HuushReaderTheme_Light;
+        if (appliedReaderThemeStyle == style) return;
+        getTheme().applyStyle(style, true);
+        appliedReaderThemeStyle = style;
+    }
+
     private final class StartupBridge {
+        @JavascriptInterface
+        public void setReaderTheme(String theme) {
+            runOnUiThread(() -> applyReaderTheme(theme));
+        }
+
         @JavascriptInterface
         public void markReady() {
             if (readinessRequested) return;

@@ -33,4 +33,72 @@
         <item name="android:navigationBarColor">@color/huush_surface_light</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <!--
+      Android owns the floating text-selection toolbar shown by WebView. These
+      overlays keep that native menu readable when Huush changes its reader
+      surface without recreating the Activity.
+    -->
+    <style name="HuushSelectionActionModeTheme.Light" parent="ThemeOverlay.AppCompat.Light">
+        <item name="android:colorBackground">@color/huush_selection_surface_light</item>
+        <item name="android:colorBackgroundFloating">@color/huush_selection_surface_light</item>
+        <item name="android:textColorPrimary">@color/huush_selection_text_light</item>
+        <item name="android:textColorSecondary">@color/huush_selection_text_light</item>
+        <item name="android:colorControlNormal">@color/huush_selection_text_light</item>
+        <item name="android:actionMenuTextColor">@color/huush_selection_text_light</item>
+        <item name="android:actionModeBackground">@drawable/huush_selection_action_mode_background_light</item>
+        <item name="colorBackgroundFloating">@color/huush_selection_surface_light</item>
+        <item name="actionMenuTextColor">@color/huush_selection_text_light</item>
+        <item name="actionModeBackground">@drawable/huush_selection_action_mode_background_light</item>
+    </style>
+
+    <style name="HuushSelectionActionModeTheme.Dark" parent="ThemeOverlay.AppCompat.Dark">
+        <item name="android:colorBackground">@color/huush_selection_surface_dark</item>
+        <item name="android:colorBackgroundFloating">@color/huush_selection_surface_dark</item>
+        <item name="android:textColorPrimary">@color/huush_selection_text_dark</item>
+        <item name="android:textColorSecondary">@color/huush_selection_text_dark</item>
+        <item name="android:colorControlNormal">@color/huush_selection_text_dark</item>
+        <item name="android:actionMenuTextColor">@color/huush_selection_text_dark</item>
+        <item name="android:actionModeBackground">@drawable/huush_selection_action_mode_background_dark</item>
+        <item name="colorBackgroundFloating">@color/huush_selection_surface_dark</item>
+        <item name="actionMenuTextColor">@color/huush_selection_text_dark</item>
+        <item name="actionModeBackground">@drawable/huush_selection_action_mode_background_dark</item>
+    </style>
+
+    <style name="HuushSelectionActionModeTheme.Sepia" parent="ThemeOverlay.AppCompat.Light">
+        <item name="android:colorBackground">@color/huush_selection_surface_sepia</item>
+        <item name="android:colorBackgroundFloating">@color/huush_selection_surface_sepia</item>
+        <item name="android:textColorPrimary">@color/huush_selection_text_sepia</item>
+        <item name="android:textColorSecondary">@color/huush_selection_text_sepia</item>
+        <item name="android:colorControlNormal">@color/huush_selection_text_sepia</item>
+        <item name="android:actionMenuTextColor">@color/huush_selection_text_sepia</item>
+        <item name="android:actionModeBackground">@drawable/huush_selection_action_mode_background_sepia</item>
+        <item name="colorBackgroundFloating">@color/huush_selection_surface_sepia</item>
+        <item name="actionMenuTextColor">@color/huush_selection_text_sepia</item>
+        <item name="actionModeBackground">@drawable/huush_selection_action_mode_background_sepia</item>
+    </style>
+
+    <style name="HuushReaderTheme_Light">
+        <item name="actionModeTheme">@style/HuushSelectionActionModeTheme.Light</item>
+        <item name="android:actionModeBackground">@drawable/huush_selection_action_mode_background_light</item>
+        <item name="android:actionMenuTextColor">@color/huush_selection_text_light</item>
+        <item name="actionModeBackground">@drawable/huush_selection_action_mode_background_light</item>
+        <item name="actionMenuTextColor">@color/huush_selection_text_light</item>
+    </style>
+
+    <style name="HuushReaderTheme_Dark">
+        <item name="actionModeTheme">@style/HuushSelectionActionModeTheme.Dark</item>
+        <item name="android:actionModeBackground">@drawable/huush_selection_action_mode_background_dark</item>
+        <item name="android:actionMenuTextColor">@color/huush_selection_text_dark</item>
+        <item name="actionModeBackground">@drawable/huush_selection_action_mode_background_dark</item>
+        <item name="actionMenuTextColor">@color/huush_selection_text_dark</item>
+    </style>
+
+    <style name="HuushReaderTheme_Sepia">
+        <item name="actionModeTheme">@style/HuushSelectionActionModeTheme.Sepia</item>
+        <item name="android:actionModeBackground">@drawable/huush_selection_action_mode_background_sepia</item>
+        <item name="android:actionMenuTextColor">@color/huush_selection_text_sepia</item>
+        <item name="actionModeBackground">@drawable/huush_selection_action_mode_background_sepia</item>
+        <item name="actionMenuTextColor">@color/huush_selection_text_sepia</item>
+    </style>
 </resources>

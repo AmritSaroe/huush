@@ -110,6 +110,7 @@ let nativeStatusBarStyle = "";
 let lastStatusBarConfig = "";
 let pendingStatusBarConfig = null;
 let nativeStatusBarSyncPromise = null;
+let nativeReaderTheme = "";
 let settingsInteractionUnlockTimeout = 0;
 let screenEnteredAt = Date.now();
 let lastPauseAt = 0;
@@ -322,6 +323,20 @@ function effectiveTheme() {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function syncNativeReaderTheme() {
+  if (!Capacitor.isNativePlatform()) return;
+  const bridge = window.HuushStartup;
+  if (typeof bridge?.setReaderTheme !== "function") return;
+  const theme = effectiveTheme();
+  if (nativeReaderTheme === theme) return;
+  try {
+    bridge.setReaderTheme(theme);
+    nativeReaderTheme = theme;
+  } catch {
+    nativeReaderTheme = "";
+  }
+}
+
 function themeLabel(theme = state.settings.theme) {
   return theme === "system" ? `System (${effectiveTheme() === "dark" ? "dark" : "light"})` : theme[0].toUpperCase() + theme.slice(1);
 }
@@ -356,6 +371,7 @@ function applySettings() {
     article.dataset.readingFont = state.settings.font;
   }
   syncNativeStatusBar();
+  syncNativeReaderTheme();
 }
 
 function syncPreferenceControls() {
