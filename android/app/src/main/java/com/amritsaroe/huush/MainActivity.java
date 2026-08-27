@@ -29,7 +29,6 @@ public class MainActivity extends BridgeActivity {
     private volatile boolean readinessRequested = false;
     private boolean reportedFullyDrawn = false;
     private long startupStartedAt;
-    private int appliedReaderThemeStyle = 0;
     private int appliedApplicationNightMode = -1;
 
     @Override
@@ -40,7 +39,6 @@ public class MainActivity extends BridgeActivity {
         startupStartedAt = SystemClock.uptimeMillis();
 
         super.onCreate(savedInstanceState);
-        applyReaderThemeOverlay("light");
 
         Window window = getWindow();
         // Android 16 enforces edge-to-edge for target SDK 36. Let system bars
@@ -71,17 +69,6 @@ public class MainActivity extends BridgeActivity {
         bridgeInsetsToWebView();
     }
 
-    private void applyReaderThemeOverlay(String theme) {
-        int style = "dark".equals(theme)
-            ? R.style.HuushReaderTheme_Dark
-            : "sepia".equals(theme)
-                ? R.style.HuushReaderTheme_Sepia
-                : R.style.HuushReaderTheme_Light;
-        if (appliedReaderThemeStyle == style) return;
-        getTheme().applyStyle(style, true);
-        appliedReaderThemeStyle = style;
-    }
-
     private void applyApplicationNightMode(String theme) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         int mode = "dark".equals(theme)
@@ -96,13 +83,12 @@ public class MainActivity extends BridgeActivity {
             uiModeManager.setApplicationNightMode(mode);
             appliedApplicationNightMode = mode;
         } catch (RuntimeException ignored) {
-            // Keep the AppCompat/action-mode overlay fallback if the platform
-            // service is unavailable or rejects the app-local mode request.
+            // The WebView keeps its normal platform selection behavior if the
+            // app-local night-mode service is unavailable or rejects the request.
         }
     }
 
     private void applyReaderTheme(String theme) {
-        applyReaderThemeOverlay(theme);
         applyApplicationNightMode(theme);
     }
 
