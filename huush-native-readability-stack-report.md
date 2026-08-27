@@ -19,6 +19,22 @@ Normal and linked article fetching must continue to use this same native reposit
 | Flutter | Native-style Android rendering and a single Dart UI codebase | Supported browser delivery through WebAssembly/canvas-oriented rendering | High UI sharing | Requires a Dart rewrite and is less natural for a browser-first, text-heavy reader with semantic links and browser selection behavior |
 | Capacitor plus the existing web UI | Minimal rewrite and excellent desktop web | Excellent | Maximum reuse of current TypeScript/DOM code | Retains the WebView-specific system-bar and selection-toolbar issues that motivated the native branch |
 
+## Flutter + Isar + Riverpod proposal
+
+This proposal is technically coherent and stronger than a generic Flutter stack because it assigns clear responsibilities: Flutter for the UI, Riverpod for predictable state, Isar for mobile/desktop offline data, and a Readability implementation for extraction. Flutter’s official platform matrix covers Android, Windows, macOS, Linux, and current major browsers. [10] Riverpod’s official documentation supports provider overrides, code generation, and linting, making it a reasonable state-management choice. [11]
+
+The important caveat is Isar’s platform boundary. Isar’s official site advertises iOS, Android, and desktop support, but does not advertise web support. A Flutter web build would therefore need a separate browser persistence adapter—such as IndexedDB, SQLite through a server-backed design, or the existing web storage/backend approach—if the desktop requirement means browser delivery rather than a Windows/macOS/Linux executable. [12]
+
+For extraction, `reader_mode` is the most relevant current Dart candidate found: it documents Android, iOS, Linux, macOS, web, and Windows compatibility, exposes Mozilla-style article fields, and claims both a JSDOMParser and a pure-Dart parser. However, its licensing is dual Apache-2.0/MPL-2.0 and its output should be benchmarked against Huush’s existing JavaScript pipeline. The similarly named `readability` package is a Flutter FFI wrapper around Go Readability and is listed for Android, iOS, and macOS, so it is not a universal web solution. [13] [14] A server-side Readability.js service remains the strongest fidelity option if all clients should receive identical extraction results.
+
+| Proposed Flutter component | Assessment for Huush |
+|---|---|
+| Flutter | Good choice if one shared UI across Android and desktop executables is more important than browser-native rendering. Web support exists, but article text, links, selection, accessibility, and SEO need explicit testing. |
+| Isar | Strong for Android and native desktop offline data, including indexes and full-text search. Do not assume it covers Flutter Web; use a storage interface with a browser-specific implementation. |
+| Riverpod | Good choice. It fits article-loading states, search, settings, sync, and testable repositories. It is not a database or extraction solution. |
+| `reader_mode` | Most promising pure-Dart candidate found for one parser across targets, but requires a benchmark corpus, licensing review, and validation against current Mozilla behavior. |
+| Server-side Readability.js | Best for algorithm fidelity and one canonical result, but requires network access, a backend, rate limits, privacy decisions, and a safe public-fetch service. |
+
 ## Recommendation
 
 Huush should use a **native Android app in Kotlin + Jetpack Compose** and keep the existing desktop web app as a separate browser-native frontend. Add a shared contract layer rather than forcing shared UI: identical article fields, preview/gate semantics, URL normalization rules, test fixtures, and repository behavior should be specified once and tested in both implementations.
@@ -38,3 +54,8 @@ Do not switch to React Native or Flutter solely to avoid duplicate UI code. Both
 [7]: https://docs.flutter.dev/platform-integration/web — Flutter official web-support documentation.
 [8]: https://capacitorjs.com/docs/ — Capacitor v8 official web-native runtime documentation.
 [9]: https://developer.android.com/compose — Android’s official Jetpack Compose overview.
+[10]: https://docs.flutter.dev/reference/supported-platforms — Flutter supported deployment platforms.
+[11]: https://riverpod.dev/docs/introduction/getting_started — Riverpod official getting-started documentation.
+[12]: https://isar.dev/ — Isar official documentation.
+[13]: https://pub.dev/packages/reader_mode — `reader_mode` Dart port of Mozilla Readability.
+[14]: https://pub.dev/packages/readability — Flutter FFI wrapper around Go Readability.
