@@ -13,3 +13,5 @@
 - [x] Implement settings persistence without scroll/focus resets and add diagnostics logging
 - [x] Validate TypeScript, lint, deterministic extraction tests, and responsive desktop-Web route rendering
 - [ ] Validate Android-native startup, selection toolbar, system bars, offline persistence, and core reader flows on a physical device
+- [x] Replace the actual Expo Library root with a blank warm off-white screen and remove all existing interface elements
+- [x] Validate the blank root route and commit the requested in-app reset to expo-react-native-test
