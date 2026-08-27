@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="huush_surface_light">#F6F1E8</color>
+    <color name="huush_action_mode_light">#F6F1E8</color>
+    <color name="huush_action_mode_sepia">#EEE2CB</color>
+    <color name="huush_action_mode_dark">#171716</color>
 </resources>

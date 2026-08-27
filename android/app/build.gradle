@@ -7,8 +7,8 @@ android {
         applicationId "com.amritsaroe.huush"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 55
-        versionName "2.6.22-targeted-reader-sheet"
+        versionCode 56
+        versionName "2.6.23-native-action-mode-theme"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
